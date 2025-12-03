@@ -4,7 +4,7 @@
 # Nom de l'environnement virtuel pour l'isolation
 VENV_DIR=".venv"
 echo "--- Démarrage de la configuration de l'environnement  GNN_Villes ---"
-
+sudo apt update && sudo apt install -y p7zip-full
 # --- 1. Installation des dépendances ---
 pip install --upgrade pip
 pip install uv ipykernel
@@ -15,6 +15,8 @@ uv pip install torch-cluster torch-scatter torch-sparse -f https://data.pyg.org/
 python -m ipykernel install --user --name=venv-gml --display-name "Python (.venv GNN_Villes)"
 mkdir ./data
 mkdir ./data_GNN
+mkdir ./BDALTI
 mkdir ./out
 mc cp -r  s3/bhurpeau/graphe/villes/data/ data/
 mc cp -r  s3/bhurpeau/graphe/villes/data_GNN/ data_GNN/
+mc cp -r  s3/bhurpeau/graphe/villes/BDALTI/ BDALTI/

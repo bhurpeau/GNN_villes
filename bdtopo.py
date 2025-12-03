@@ -1,4 +1,5 @@
-#!/usr/bin/env python3
+# bdtopo.py
+
 import os
 import re
 import glob
@@ -15,7 +16,8 @@ DOWNLOAD_DIR = "downloads"
 UNZIP_DIR = "unzipped"
 OUT_GPKG = "./data/bdtopo_routes.gpkg"
 LAYER_OUT = "troncon_de_route"
-DATE_FILTER = "2021-03"  
+DATE_FILTER = "2021-03"
+
 
 def find_7z_links(date):
     resp = requests.get(BDTOPO_PAGE)
@@ -41,6 +43,7 @@ def find_7z_links(date):
 
     links = sorted(links)
     return links
+
 
 def download_file(url, out_dir):
     os.makedirs(out_dir, exist_ok=True)
@@ -68,9 +71,11 @@ def download_file(url, out_dir):
 
     return out_path
 
+
 def run(cmd):
     print(">>", " ".join(cmd))
     subprocess.run(cmd, check=True)
+
 
 def unzip_one_archive(archive_path):
     """
@@ -91,6 +96,7 @@ def unzip_one_archive(archive_path):
 
     return target_dir
 
+
 def find_troncon_shapefiles_in_dir(root_dir):
     """
     Cherche les TRONCON_DE_ROUTE.shp sous root_dir.
@@ -101,11 +107,14 @@ def find_troncon_shapefiles_in_dir(root_dir):
     print(f"{len(files)} fichiers TRONCON_DE_ROUTE.shp trouvés dans {root_dir}.")
     return files
 
+
 def merge_shapefiles_to_gpkg(shapefiles):
     """
-    Fusionne les shapefiles TRONCON_DE_ROUTE dans OUT_GPKG.
-    - Si OUT_GPKG n'existe pas : création avec le premier shapefile.
-    - Sinon : append.
+    Fusionne les shapefiles TRONCON_DE_ROUTE dans OUT_GPKG
+    en filtrant :
+      FICTIF = 'Non'
+      ETAT   = 'En service'
+    et en imposant une géométrie 2D (LINESTRING).
     """
     if not shapefiles:
         return
@@ -116,22 +125,27 @@ def merge_shapefiles_to_gpkg(shapefiles):
 
     first_create = not os.path.exists(OUT_GPKG)
 
+    # Requête OGR SQL pour filtrer les champs attributaires
+    sql = "SELECT * FROM TRONCON_DE_ROUTE WHERE FICTIF = 'Non' AND ETAT = 'En service'"
+
     for shp in shapefiles:
         if first_create:
+            # Création du GPKG
             cmd = [
                 "ogr2ogr",
                 "-f", "GPKG",
                 OUT_GPKG,
                 shp,
                 "-nln", LAYER_OUT,
+                "-sql", sql,           # 🔍 filtre ici
                 "-t_srs", "EPSG:2154",
-                "-nlt", "LINESTRING",
+                "-nlt", "LINESTRING",  # aplati en 2D
                 "-dim", "2",
                 "-progress",
             ]
-
             first_create = False
         else:
+            # Append
             cmd = [
                 "ogr2ogr",
                 "-f", "GPKG",
@@ -139,13 +153,14 @@ def merge_shapefiles_to_gpkg(shapefiles):
                 OUT_GPKG,
                 shp,
                 "-nln", LAYER_OUT,
+                "-sql", sql,           # 🔍 filtre ici aussi
                 "-t_srs", "EPSG:2154",
                 "-nlt", "LINESTRING",
                 "-dim", "2",
                 "-progress",
             ]
-
         run(cmd)
+
 
 def main():
     links = find_7z_links(DATE_FILTER)
@@ -170,8 +185,12 @@ def main():
         shutil.rmtree(dept_dir)
         os.remove(archive_path)
         print(f"[CLEAN] Supprimé : {dept_dir} et {archive_path}")
-
+    cmd = ['rm', '-r', DOWNLOAD_DIR]
+    run(cmd)
+    cmd = ['rm', '-r', UNZIP_DIR]
+    run(cmd)
     print(f"Terminé. GPKG final : {OUT_GPKG}")
+
 
 if __name__ == "__main__":
     main()
