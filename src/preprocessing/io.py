@@ -44,8 +44,18 @@ def load_parquet_data(parquet_path: str) -> pd.DataFrame:
     return pd.read_parquet(parquet_path)
 
 
+def load_geoparquet_data(parquet_path: str) -> gpd.GeoDataFrame:
+    """Charge des données tabulaires depuis un fichier GeoParquet."""
+    return gpd.read_parquet(parquet_path)
+
+
 def save_parquet_data(df: pd.DataFrame, path: str):
     """Enregistre un DataFrame au format Parquet."""
+    df.to_parquet(path, index=False)
+
+
+def save_geoparquet_data(df: gpd.GeoDataFrame, path: str):
+    """Enregistre un GeoDataFrame au format Parquet."""
     df.to_parquet(path, index=False)
 
 

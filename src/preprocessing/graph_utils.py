@@ -2,79 +2,162 @@
 # Construction du graphe de voisinage des carreaux et communes
 
 import numpy as np
-from libpysal import weights
 import geopandas as gpd
-import torch  # utilisé pour formater la sortie des arêtes des communes
+import torch
+import pandas as pd
+from libpysal import weights
 
 
-def build_contiguity_edges(tiles_gdf: gpd.GeoDataFrame, include_inter_communal: bool = True) -> np.ndarray:
+def build_micro_intra_edges(df_tiles):
     """
-    Construit les arêtes de contiguïté entre carreaux adjacents.
-    Args:
-        tiles_gdf (GeoDataFrame): GeoDataFrame des carreaux avec au minimum la géométrie et un code commune ('code').
-        include_inter_communal (bool): Si False, ne garde que les arêtes entre carreaux de la même commune (intra-communales).
-                                       Si True, inclut toutes les arêtes de voisinage (y compris entre communes différentes).
-    Returns:
-        edge_index (ndarray shape [2, M]): Tableau d'indices des paires de carreaux voisins (format [source_indices; target_indices]).
-                                           Les indices de nœuds correspondent à l'index de tiles_gdf.reset_index(drop=True).
+    Construit les arêtes intra-communales (Micro) basées sur la contiguïté Reine.
+    Filtre les liens qui traversent les frontières communales.
     """
-    # S'assurer que l'index va de 0 à N-1 pour correspondre aux IDs de nœuds
-    tiles = tiles_gdf.reset_index(drop=True).copy()
-    # Calcul des voisins de Queen (partage d'une frontière ou d'un coin)
-    w = weights.contiguity.Queen.from_dataframe(tiles, use_index=False)
-    # Obtenir la liste des connexions (adjacency list)
-    adj = w.to_adjlist(remove_symmetric=False)  # on garde les deux directions
-    # Filtrer éventuellement les arêtes inter-communales
-    if not include_inter_communal:
-        # Récupérer le code commune de chaque index dans adj
-        adj['comm_source'] = tiles.loc[adj['focal'], 'code'].values
-        adj['comm_target'] = tiles.loc[adj['neighbor'], 'code'].values
-        # Ne garder que les paires dont les deux carreaux sont de la même commune
-        adj = adj[adj['comm_source'] == adj['comm_target']]
-    # Construire le tableau d'arêtes
-    edge_index = np.vstack([adj['focal'].to_numpy(), adj['neighbor'].to_numpy()])
+    print("--- Construction du Graphe Micro (Intra-Commune) ---")
+    df_tiles = df_tiles.reset_index(drop=True)
+
+    # 1. Calcul de l'adjacence physique (Queen)
+    # Silence_warnings évite les alertes sur les îles sans voisins
+    w = weights.Queen.from_dataframe(df_tiles, use_index=False, silence_warnings=True)
+    adj = w.to_adjlist(remove_symmetric=False)
+
+    # 2. Filtrage : On ne garde que les liens au sein de la MÊME commune
+    # On mappe les codes communes
+    communes = df_tiles['code'].values
+    adj['commune_src'] = communes[adj['focal']]
+    adj['commune_dst'] = communes[adj['neighbor']]
+
+    mask_internal = adj['commune_src'] == adj['commune_dst']
+    internal_edges = adj[mask_internal]
+
+    # 3. Conversion en Tenseur
+    edge_index = torch.tensor([
+        internal_edges['focal'].values,
+        internal_edges['neighbor'].values
+    ], dtype=torch.long)
+
+    print(f"-> {edge_index.shape[1]} arêtes micro internes générées.")
     return edge_index
 
 
-def build_commune_adjacency_graph(communes_gdf: gpd.GeoDataFrame):
+def build_macro_physical_graph(gdf_communes, gdf_routes):
     """
-    Construit le graphe des communes adjacentes, pondéré par la longueur de frontière commune.
-    Args:
-        communes_gdf (GeoDataFrame): Doit contenir au moins 'code' pour identifier la commune et 'geometry' pour le polygone.
-    Returns:
-        edge_index (torch.LongTensor): tensor [2, E] des arêtes entre communes (indices 0..N-1 correspondant à l'index du GeoDataFrame fourni).
-        edge_attr (torch.FloatTensor): tensor [E, 1] avec la longueur de frontière commune (normalisée par log1p).
-        idx_to_code (dict): mapping de l'index numérique du nœud vers le code commune.
+    Construit le graphe Macro complet (Squelette physique + Perméabilité routière).
+    Intègre l'optimisation spatiale et les masques alignés.
     """
-    # Copier et réindexer le GeoDataFrame des communes
-    gdf = communes_gdf.reset_index(drop=True).copy()
-    gdf['node_idx'] = gdf.index  # index explicite du nœud
-    idx_to_code = gdf['code'].to_dict()
+    print("--- Construction du Graphe Macro (Physique + Routes) ---")
 
-    # Légère correction topologique : buffer 0 pour réparer d'éventuelles géométries invalides
+    # 1. Préparation
+    gdf = gdf_communes.reset_index(drop=True).copy()
+    gdf['node_idx'] = gdf.index
+    mapping_idx_code = gdf['code'].to_dict()
+
+    # Buffer de sécurité pour la topologie
     gdf['geometry'] = gdf.geometry.buffer(0.1)
 
-    # Jointure spatiale du gdf communes avec lui-même pour trouver toutes les intersections (communes adjacentes ou se touchant)
-    adj = gpd.sjoin(gdf[['geometry', 'node_idx']], gdf[['geometry', 'node_idx']], 
-                    how='inner', predicate='intersects')
-    # Enlever les auto-intersections (une commune avec elle-même)
+    # 2. Détection des voisins (Spatial Join)
+    print("   -> Détection des frontières...")
+    adj = gpd.sjoin(
+        gdf[['geometry', 'node_idx']], 
+        gdf[['geometry', 'node_idx']], 
+        how='inner', 
+        predicate='intersects'
+    )
+    # Retirer les auto-boucles
     adj = adj[adj['node_idx_left'] != adj['node_idx_right']]
 
-    # Calcul de la longueur des frontières communes pour chaque paire
-    geom_left = gdf.loc[adj['node_idx_left'], 'geometry'].values
-    geom_right = gdf.loc[adj['node_idx_right'], 'geometry'].values
-    # Intersection des polygones adjacents -> résultat en LineString (ligne de frontière)
-    border_lines = gpd.GeoSeries(geom_left).intersection(gpd.GeoSeries(geom_right))
-    lengths = border_lines.length  # longueur en unités de la projection (mètres si projection métrique)
+    # 3. Calcul des longueurs (Vectorisé)
+    print("   -> Calcul des longueurs...")
+    geom_src = gdf.loc[adj['node_idx_left'], 'geometry'].values
+    geom_dst = gdf.loc[adj['node_idx_right'], 'geometry'].values
 
-    # Filtrer les frontières insignifiantes (longueur <= 1 m, probablement juste un coin touchant)
-    valid = lengths > 1.0
-    src_nodes = adj['node_idx_left'].to_numpy()[valid]
-    tgt_nodes = adj['node_idx_right'].to_numpy()[valid]
-    border_lengths = lengths.to_numpy()[valid]
+    # Intersection vectorielle
+    intersections = gpd.GeoSeries(geom_src).intersection(gpd.GeoSeries(geom_dst))
+    lengths = intersections.length
 
-    # Construire les tenseurs PyTorch pour edge_index et edge_attr
-    edge_index = torch.tensor([src_nodes, tgt_nodes], dtype=torch.long)
-    # On utilise une échelle logarithmique pour réduire la plage des valeurs de longueur
-    edge_attr = torch.tensor(border_lengths, dtype=torch.float32).log1p().unsqueeze(1)
-    return edge_index, edge_attr, idx_to_code
+    # 4. MASQUE STRICT (Alignement des index)
+    # On ne garde que > 1m
+    mask_valid = (lengths > 1.0).values
+
+    final_src = adj['node_idx_left'].values[mask_valid]
+    final_dst = adj['node_idx_right'].values[mask_valid]
+    final_len = lengths.values[mask_valid]
+
+    print(f"   -> {len(final_src)} frontières valides.")
+
+    # 5. Calcul des Routes (Perméabilité)
+    # On appelle la sous-fonction optimisée
+    print("   -> Calcul de la perméabilité routière...")
+    road_counts = _compute_road_crossings(
+        final_src, final_dst, gdf, gdf_routes
+    )
+
+    # 6. Assemblage Final
+    edge_index = torch.tensor([final_src, final_dst], dtype=torch.long)
+
+    # Attributs : [Log(Longueur), Log(Nb_Routes + 1)]
+    attr_len = torch.tensor(final_len, dtype=torch.float).log1p().unsqueeze(1)
+    attr_road = torch.tensor(road_counts, dtype=torch.float).log1p().unsqueeze(1)
+
+    edge_attr = torch.cat([attr_len, attr_road], dim=1)
+
+    return edge_index, edge_attr, mapping_idx_code
+
+
+def _compute_road_crossings(src_idx, dst_idx, gdf_communes, gdf_routes):
+    """
+    Sous-fonction privée optimisée avec Spatial Index.
+    """
+    # Index spatial des routes
+    routes_sindex = gdf_routes.sindex
+
+    # Poids des routes (Feature Engineering)
+    # Adaptez 'NATURE' selon votre BD TOPO
+    if 'IMPORTANCE' in gdf_routes.columns:
+        poids_route = {
+            '1': 10.0,
+            '2': 8.0,
+            '3': 5.0,
+            '4': 3.0,
+            '5': 1.0,
+            '6': 0.0,
+        }
+        # On map et on remplit les inconnus par 1.0 (Route standard)
+        route_weights = gdf_routes['IMPORTANCE'].map(poids_route).fillna(1.0).values
+    else:
+        route_weights = np.ones(len(gdf_routes))
+
+    gdf_routes['w_calc'] = route_weights
+
+    geoms = gdf_communes.geometry.values
+    results = []
+
+    for i, (s, d) in enumerate(zip(src_idx, dst_idx)):
+        # Intersection précise (Ligne frontière)
+        boundary = geoms[s].intersection(geoms[d])
+
+        if boundary.is_empty:
+            results.append(0.0)
+            continue
+
+        # 1. Filtre Spatial Rapide (Bounding Box)
+        # Renvoie les indices entiers des routes candidates
+        candidate_ids = list(routes_sindex.query(boundary, predicate='intersects'))
+
+        if not candidate_ids:
+            results.append(0.0)
+            continue
+
+        # 2. Intersection Précise sur les candidats
+        candidates = gdf_routes.iloc[candidate_ids]
+        real_inter = candidates[candidates.intersects(boundary)]
+
+        if real_inter.empty:
+            results.append(0.0)
+        else:
+            results.append(real_inter['w_calc'].sum())
+
+        if i % 10000 == 0:
+            print(f"      ... {i}/{len(src_idx)} traités")
+
+    return results

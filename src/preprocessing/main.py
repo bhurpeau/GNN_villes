@@ -1,39 +1,33 @@
 # main.py
 # Pipeline principal CLI pour préparer les graphes
 
-import argparse
 import geopandas as gpd
 import numpy as np
 import pandas as pd
-from io import load_grid_shapefile, load_communes_shapefile, load_csv_data, load_parquet_data, save_parquet_data
+from io import load_grid_shapefile, load_communes_shapefile, load_csv_data, load_geoparquet_data, save_geoparquet_data
 from tile_processing import create_tile_id_raster, compute_landcover_composition, compute_altitude_stats, assign_tiles_to_communes
-from graph_utils import build_contiguity_edges, build_commune_adjacency_graph
+from graph_utils import build_micro_intra_edges, build_macro_physical_graph
 
 # Définition des chemins de fichiers en entrée (à adapter si besoin)
 GRID_PATH = "data/grille1km_metropole.gpkg"
 COMMUNES_PATH = "data/commune_francemetro_2023.gpkg"
+ROUTE_PATH = "data/bdtopo_routes.gpkg"
 RASTER_OCS_PATH = "data/OCS_2018.tif"
 RASTER_DEM_PATH = "BDALTI/bdalti25m.tif"
 RASTER_SLOPE_PATH = "BDALTI/bdalti25m_slope_deg.tif"
 
 # Chemins de sortie (parquet et numpy)
 OUT_TILE_FEATURES = "data_GNN/statistiques_carreaux.parquet.gz"
-OUT_EDGES_INTRA = "data_GNN/edges_intra_communes.npy"
 OUT_EDGES_ALL = "data_GNN/edges_toutes_communes.npy"
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Prépare les données de graphe pour les communes (carreaux de 1km).")
-    parser.add_argument("--commune", help="Code commune (INSEE) cible pour extraire le sous-graphe correspondant.")
-    parser.add_argument("--no-inter", action="store_true", help="Si spécifié, exclut les arêtes inter-communales du graphe des carreaux.")
-    args = parser.parse_args()
-
     # 1. Charger les données de base
     grid = load_grid_shapefile(GRID_PATH)            # Grille 1km (GeoDataFrame)
     communes = load_communes_shapefile(COMMUNES_PATH)  # Communes (GeoDataFrame)
     # (Optionnel: charger données population et socio-éco si disponibles)
     try:
-        pop_df = load_parquet_data("data/grid_1km.parquet")  # population par carreau (INSEE grille 1km)
+        pop_df = load_geoparquet_data("data/grid_1km.parquet")  # population par carreau (INSEE grille 1km)
     except FileNotFoundError:
         pop_df = None
     try:
@@ -98,46 +92,19 @@ def main():
     stats_gdf = stats_gdf.fillna(0)
 
     # Sauvegarder le tableau final des nœuds (features par carreau) pour une utilisation ultérieure
-    save_parquet_data(stats_gdf, OUT_TILE_FEATURES)
+    save_geoparquet_data(stats_gdf, OUT_TILE_FEATURES)
     print(f"[OK] Données de {len(stats_gdf)} carreaux enregistrées dans {OUT_TILE_FEATURES}.")
 
     # 6. Construction du graphe de contiguïté des carreaux
-    include_inter = not args.no_inter
-    edges = build_contiguity_edges(stats_gdf, include_inter_communal=include_inter)
-    if include_inter:
-        np.save(OUT_EDGES_ALL, edges)
-        print(f"[OK] Graphe complet (arêtes intra- + inter-communales) enregistré: {OUT_EDGES_ALL} ({edges.shape[1]} arêtes).")
-    else:
-        np.save(OUT_EDGES_INTRA, edges)
-        print(f"[OK] Graphe intra-communal uniquement enregistré: {OUT_EDGES_INTRA} ({edges.shape[1]} arêtes).")
+    edges = build_micro_intra_edges(stats_gdf)
+    np.save(OUT_EDGES_ALL, edges)
+    print(f"[OK] Graphe complet (arêtes intra- + inter-communales) enregistré: {OUT_EDGES_ALL} ({edges.shape[1]} arêtes).")
 
-    # 7. Si une commune cible est spécifiée, extraire son sous-graphe
-    if args.commune:
-        code = args.commune
-        # Filtrer les carreaux de cette commune
-        commune_tiles = stats_gdf[stats_gdf['code'] == code].copy()
-        if commune_tiles.empty:
-            print(f"[ERREUR] Code commune {code} introuvable dans les données.")
-            return
-        # Inclure éventuellement les voisins immédiats de la commune pour garder les arêtes inter-communales
-        if include_inter:
-            # Sélectionner aussi les carreaux adjacents (voisins) appartenant aux autres communes
-            all_edges = edges
-            # Trouver les indices des nœuds correspondant à la commune cible
-            node_indices = commune_tiles.index.to_list()
-            # Trouver les arêtes où l'une des extrémités est dans ces indices
-            mask_edges = np.isin(all_edges[0], node_indices) | np.isin(all_edges[1], node_indices)
-            sub_edges = all_edges[:, mask_edges]
-            # Récupérer l'ensemble des nœuds touchés par ces arêtes (commune + voisins)
-            sub_node_indices = np.unique(sub_edges)
-            subgraph_nodes = stats_gdf.iloc[sub_node_indices].copy()
-        else:
-            subgraph_nodes = commune_tiles
-            sub_edges = build_contiguity_edges(subgraph_nodes, include_inter_communal=False)
-        # Sauvegarder ou afficher le sous-graphe de la commune
-        subgraph_nodes.to_file(f"data_GNN/commune_{code}_nodes.gpkg", driver="GPKG")
-        np.save(f"data_GNN/commune_{code}_edges.npy", sub_edges)
-        print(f"[OK] Sous-graphe de la commune {code} : {len(subgraph_nodes)} nœuds, {sub_edges.shape[1]} arêtes.")
+    gdf_communes = gpd.read_file(COMMUNES_PATH)
+    gdf_routes = gpd.read_file(ROUTE_PATH, columns=['ID', 'IMPORTANCE', 'geometry'])
+
+    # 7. Construction des données macro
+    edge_index, edge_attr, mapping_idx_code = build_macro_physical_graph(gdf_communes, gdf_routes)
 
 
 if __name__ == "__main__":
