@@ -3,6 +3,8 @@
 
 import argparse
 import geopandas as gpd
+import numpy as np
+import pandas as pd
 from io import load_grid_shapefile, load_communes_shapefile, load_csv_data, load_parquet_data, save_parquet_data
 from tile_processing import create_tile_id_raster, compute_landcover_composition, compute_altitude_stats, assign_tiles_to_communes
 from graph_utils import build_contiguity_edges, build_commune_adjacency_graph
@@ -10,9 +12,9 @@ from graph_utils import build_contiguity_edges, build_commune_adjacency_graph
 # Définition des chemins de fichiers en entrée (à adapter si besoin)
 GRID_PATH = "data/grille1km_metropole.gpkg"
 COMMUNES_PATH = "data/commune_francemetro_2023.gpkg"
-RASTER_OCS_PATH = "data/OCS_2023.tif"
-RASTER_DEM_PATH = "BDALTI_25m/bdalti25m.tif"
-RASTER_SLOPE_PATH = "BDALTI_25m/bdalti25m_slope_deg.tif"
+RASTER_OCS_PATH = "data/OCS_2018.tif"
+RASTER_DEM_PATH = "BDALTI/bdalti25m.tif"
+RASTER_SLOPE_PATH = "BDALTI/bdalti25m_slope_deg.tif"
 
 # Chemins de sortie (parquet et numpy)
 OUT_TILE_FEATURES = "data_GNN/statistiques_carreaux.parquet.gz"
@@ -55,7 +57,7 @@ def main():
         stats_df = pd.merge(stats_df, socio_df, left_on="id_carr_1km", right_on="idcar_1km", how="left")
     # 4. Ajouter la géométrie des carreaux et assigner les communes
     # Merge avec la grille pour récupérer la géométrie
-    stats_gdf = gpd.GeoDataFrame(pd.merge(stats_df, grid[['id_carr_1km','geometry']], on="id_carr_1km", how="left"), crs=grid.crs)
+    stats_gdf = gpd.GeoDataFrame(pd.merge(stats_df, grid[['id_carr_1km', 'geometry']], on="id_carr_1km", how="left"), crs=grid.crs)
     # Attribution des communes
     mapping_series = assign_tiles_to_communes(grid, communes)
     stats_gdf['code'] = stats_gdf['id_carr_1km'].map(mapping_series.to_dict())
