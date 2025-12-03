@@ -19,4 +19,5 @@ mkdir ./BDALTI
 mkdir ./out
 mc cp -r  s3/bhurpeau/graphe/villes/data/ data/
 mc cp -r  s3/bhurpeau/graphe/villes/data_GNN/ data_GNN/
-mc cp -r  s3/bhurpeau/graphe/villes/BDALTI/ BDALTI/
+mc cp  s3/bhurpeau/graphe/villes/BDALTI/bdalti25m.tif BDALTI/
+mc cp  s3/bhurpeau/graphe/villes/BDALTI/bdalti25m_slope_deg.tif BDALTI/
