@@ -51,3 +51,5 @@ def process_macro_flows(dad_path, dt_path, pop_path, acti_path, output_nodes, ou
 
     # 3. Sauvegarde finale
     save_parquet_data(edges_final, output_edges)
+    return flux_internes, edges_final
+

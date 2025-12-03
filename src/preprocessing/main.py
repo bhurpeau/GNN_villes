@@ -7,6 +7,7 @@ import pandas as pd
 from io import load_grid_shapefile, load_communes_shapefile, load_csv_data, load_geoparquet_data, save_geoparquet_data
 from tile_processing import create_tile_id_raster, compute_landcover_composition, compute_altitude_stats, assign_tiles_to_communes
 from graph_utils import build_micro_intra_edges, build_macro_physical_graph
+from cities_processing import process_macro_flows
 
 # Définition des chemins de fichiers en entrée (à adapter si besoin)
 GRID_PATH = "data/grille1km_metropole.gpkg"
@@ -15,6 +16,10 @@ ROUTE_PATH = "data/bdtopo_routes.gpkg"
 RASTER_OCS_PATH = "data/OCS_2018.tif"
 RASTER_DEM_PATH = "BDALTI/bdalti25m.tif"
 RASTER_SLOPE_PATH = "BDALTI/bdalti25m_slope_deg.tif"
+MiGRATIONS = "./data/DAD21.parquet"
+TRAVAIL = "./data/DT21.parquet"
+POPULATION = "./data/pop21.csv"
+ACTIVITE = './data/acti.csv'
 
 # Chemins de sortie (parquet et numpy)
 OUT_TILE_FEATURES = "data_GNN/statistiques_carreaux.parquet.gz"
@@ -105,6 +110,18 @@ def main():
 
     # 7. Construction des données macro
     edge_index, edge_attr, mapping_idx_code = build_macro_physical_graph(gdf_communes, gdf_routes)
+
+    # 8. Construction des données macro (Flux & Socio-éco) - MANQUANT
+    print("--- Traitement des flux Macro ---")
+    # Définir les chemins (idéalement via config.yaml, sinon en constantes)
+    process_macro_flows(
+        dad_path=MiGRATIONS,
+        dt_path=TRAVAIL,
+        pop_path=POPULATION,
+        acti_path=ACTIVITE,
+        output_nodes="data_GNN/nodes_macro_attributes.parquet",
+        output_edges="data_GNN/edges_macro_flux.parquet"
+    )
 
 
 if __name__ == "__main__":
