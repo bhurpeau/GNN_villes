@@ -10,19 +10,14 @@ def merge_macro_edges(phys_index, phys_attr, flux_index, flux_attr):
     Fusionne les arêtes physiques (non-dirigées) et fonctionnelles (dirigées).
     Sortie : Graphe dirigé unifié avec attributs de dim 4 : [Len, Perm, Navette, Migra]
     """
-    # 1. Physique (Symétrique) : On duplique pour rendre bidirectionnel (A->B et B->A)
+    # 1. Physique (Symétrique)
     phys_index_bi = torch.cat([phys_index, phys_index.flip(0)], dim=1)
     phys_attr_bi = torch.cat([phys_attr, phys_attr], dim=0)  # [N_phys*2, 2]
 
-    # 2. Flux (Asymétrique) : On garde tel quel (Source -> Cible)
-    # flux_attr est déjà [N_flux, 2]
-
     # 3. Padding (Remplissage des dimensions manquantes)
-    # Pour les arêtes physiques : Flux = 0
     zeros_flux = torch.zeros((phys_attr_bi.size(0), 2))
     attr_phys_final = torch.cat([phys_attr_bi, zeros_flux], dim=1)
 
-    # Pour les arêtes de flux : Physique = 0
     zeros_phys = torch.zeros((flux_attr.size(0), 2))
     attr_flux_final = torch.cat([zeros_phys, flux_attr], dim=1)
 

@@ -39,7 +39,7 @@ class HierarchicalGNN(nn.Module):
             hidden_dim * num_heads, latent_dim, heads=1, edge_dim=4, concat=False
         )
         # Décodeur (pour l'auto-supervision)
-        self.predictself.decoder = nn.Sequential(
+        self.decoder = nn.Sequential(
             nn.Linear(latent_dim, hidden_dim),
             nn.ReLU(),
             nn.Linear(hidden_dim, social_output_dim),
