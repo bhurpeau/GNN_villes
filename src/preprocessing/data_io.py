@@ -60,12 +60,12 @@ def load_geoparquet_data(parquet_path: str) -> gpd.GeoDataFrame:
 
 def save_parquet_data(df: pd.DataFrame, path: str):
     """Enregistre un DataFrame au format Parquet."""
-    df.to_parquet(path, index=False)
+    df.to_parquet(path)
 
 
 def save_geoparquet_data(df: gpd.GeoDataFrame, path: str):
     """Enregistre un GeoDataFrame au format Parquet."""
-    df.to_parquet(path, index=False)
+    df.to_parquet(path)
 
 
 def list_bdalti_links(pattern: str = None) -> list:

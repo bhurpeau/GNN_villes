@@ -73,8 +73,16 @@ def main():
     # Ajouter population et socio-éco si disponibles
     if pop_df is not None:
         stats_df = pd.merge(stats_df, pop_df, left_on="id_carr_1km", right_on="GRD_ID", how="left")
+        if 'GRD_ID' in stats_df.columns:
+            stats_df = stats_df.drop(columns=['GRD_ID'])
     if socio_df is not None:
         stats_df = pd.merge(stats_df, socio_df, left_on="id_carr_1km", right_on="idcar_1km", how="left")
+        if 'idcar_1km_y' in stats_df.columns:
+            stats_df = stats_df.drop(columns=['idcar_1km_y'])
+        elif 'idcar_1km' in stats_df.columns and 'id_carr_1km' in stats_df.columns:
+            stats_df = stats_df.drop(columns=['idcar_1km'])
+    stats_df['id_carr_1km'] = stats_df['id_carr_1km'].astype(str)
+
     # 4. Ajouter la géométrie des carreaux et assigner les communes
     # Merge avec la grille pour récupérer la géométrie
     stats_gdf = gpd.GeoDataFrame(pd.merge(stats_df, grid[['id_carr_1km', 'geometry']], on="id_carr_1km", how="left"), crs=grid.crs)
@@ -116,8 +124,30 @@ def main():
         stats_gdf['is_imputed'] = (stats_gdf['i_est_1km'] > 0).astype(int)
     # Remplacer les NaN restants par 0
     stats_gdf = stats_gdf.fillna(0)
-
+    print(stats_gdf.columns)
     # Sauvegarder le tableau final des nœuds (features par carreau) pour une utilisation ultérieure
+    to_keep = [
+                'id_carr_1km', 'z_mean', 'z_std', 'slope_mean', 'part_classe_0',
+                'part_classe_1', 'part_classe_2', 'part_classe_3', 'part_classe_4',
+                'part_classe_5', 'part_classe_6', 'part_classe_7', 'part_classe_8',
+                'part_classe_9', 'part_classe_10', 'part_classe_11', 'part_classe_12',
+                'part_classe_13', 'part_classe_14', 'part_classe_15', 'part_classe_16',
+                'part_classe_17', 'part_classe_18', 'part_classe_19', 'part_classe_20',
+                'part_classe_21', 'part_classe_22', 'part_classe_23', 'part_classe_24',
+                'DIST_BORD', 'TOT_P_2018', 'TOT_P_2006', 'TOT_P_2011', 'TOT_P_2021',
+                'i_est_1km', 'lcog_geo', 'ind', 'men',
+                'men_pauv', 'men_1ind', 'men_5ind', 'men_prop', 'men_fmp', 'ind_snv',
+                'men_surf', 'men_coll', 'men_mais', 'log_av45', 'log_45_70',
+                'log_70_90', 'log_ap90', 'log_inc', 'log_soc', 'ind_0_3', 'ind_4_5',
+                'ind_6_10', 'ind_11_17', 'ind_18_24', 'ind_25_39', 'ind_40_54',
+                'ind_55_64', 'ind_65_79', 'ind_80p', 'ind_inc', 'geometry', 'code',
+                'struct_bati', 'struct_eco', 'struct_nature', 'struct_agri',
+                'struct_eau', 'struct_glacier', 'densite_pop', 'croissance_pop',
+                'niveau_vie_moyen', 'taux_pauvrete', 'part_proprio', 'part_maison',
+                'part_hlm', 'is_imputed'
+                ]
+
+    stats_df = stats_df[to_keep].copy()
     save_geoparquet_data(stats_gdf, OUT_TILE_FEATURES)
     print(f"[OK] Données de {len(stats_gdf)} carreaux enregistrées dans {OUT_TILE_FEATURES}.")
 
