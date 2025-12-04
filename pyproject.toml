@@ -9,7 +9,7 @@ authors = [
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
-    "community>=1.0.0b1", 
+    "community>=1.0.0b1",
     "fiona>=1.10.1",
     "geopandas>=1.1.1",
     "hdbscan>=0.8.40",
@@ -22,7 +22,8 @@ dependencies = [
     "optuna>=4.5.0",
     "matplotlib>=3.10.7",
     "libpysal>=4.13.0",
-    "pyarrow>=22.0.0"
+    "pyarrow>=22.0.0",
+    "rasterio>=1.4.3",
 ]
 
 [dependency-groups]

@@ -19,8 +19,9 @@ def create_tile_id_raster(grid_gdf: gpd.GeoDataFrame, reference_raster_path: str
     with rasterio.open(reference_raster_path) as src_ref:
         ref_crs = src_ref.crs
         ref_transform = src_ref.transform
-        height, width = src_ref.height, src_ref.width
-        profile = src_ref.profile
+        height = src_ref.height
+        width = src_ref.width
+        profile = src_ref.profile.copy()
 
     # Reprojection de la grille si nécessaire
     if grid_gdf.crs != ref_crs:
@@ -36,8 +37,14 @@ def create_tile_id_raster(grid_gdf: gpd.GeoDataFrame, reference_raster_path: str
     # Préparer les tuples (geometry, value) pour chaque carreau
     shapes = [(geom, id_map[val]) for geom, val in zip(grid.geometry, grid[id_col])]
     # Rasterisation de la grille
-    tile_id_array = rasterize(shapes=shapes, out_shape=(height, width), transform=ref_transform,
-                              fill=0, dtype="int32")
+    tile_id_array = rasterize(
+                            shapes=shapes,
+                            out_shape=(height, width),
+                            transform=ref_transform,
+                            fill=0,
+                            dtype="int32"
+                        )
+
     # Mettre à jour le profil raster pour le fichier de sortie
     profile.update({
         "dtype": "int32",
@@ -45,7 +52,9 @@ def create_tile_id_raster(grid_gdf: gpd.GeoDataFrame, reference_raster_path: str
         "nodata": 0,
         "compress": "LZW",
         "tiled": True,
-        "BIGTIFF": "YES"
+        "blockxsize": 256,
+        "blockysize": 256,
+        "BIGTIFF": "IF_NEEDED",
     })
     # Enregistrer le raster d'identifiants de carreaux
     with rasterio.open(out_raster_path, "w", **profile) as dst:

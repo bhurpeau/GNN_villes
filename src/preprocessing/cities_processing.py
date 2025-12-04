@@ -1,5 +1,5 @@
 import pandas as pd
-from io import load_parquet_data, load_csv_data, save_parquet_data
+from .data_io import load_parquet_data, load_csv_data, save_parquet_data
 
 
 def process_macro_flows(dad_path, dt_path, pop_path, acti_path, output_nodes, output_edges):

@@ -4,16 +4,18 @@
 import geopandas as gpd
 import numpy as np
 import pandas as pd
-from io import load_grid_shapefile, load_communes_shapefile, load_csv_data, load_geoparquet_data, save_geoparquet_data
-from tile_processing import create_tile_id_raster, compute_landcover_composition, compute_altitude_stats, assign_tiles_to_communes
-from graph_utils import build_micro_intra_edges, build_macro_physical_graph
-from cities_processing import process_macro_flows
+import torch
+import os
+from .data_io import load_grid_shapefile, load_communes_shapefile, load_csv_data, load_parquet_data, save_geoparquet_data, is_raster_valid
+from .tile_processing import create_tile_id_raster, compute_landcover_composition, compute_altitude_stats, assign_tiles_to_communes
+from .graph_utils import build_micro_intra_edges, build_macro_physical_graph
+from .cities_processing import process_macro_flows
 
 # Définition des chemins de fichiers en entrée (à adapter si besoin)
 GRID_PATH = "data/grille1km_metropole.gpkg"
 COMMUNES_PATH = "data/commune_francemetro_2023.gpkg"
 ROUTE_PATH = "data/bdtopo_routes.gpkg"
-RASTER_OCS_PATH = "data/OCS_2018.tif"
+RASTER_OCS_PATH = "data/OCS_2023.tif"
 RASTER_DEM_PATH = "BDALTI/bdalti25m.tif"
 RASTER_SLOPE_PATH = "BDALTI/bdalti25m_slope_deg.tif"
 MiGRATIONS = "./data/DAD21.parquet"
@@ -24,6 +26,8 @@ ACTIVITE = './data/acti.csv'
 # Chemins de sortie (parquet et numpy)
 OUT_TILE_FEATURES = "data_GNN/statistiques_carreaux.parquet.gz"
 OUT_EDGES_ALL = "data_GNN/edges_toutes_communes.npy"
+raster_output = "data/grille1km_id_10m.tif"
+raster_output_25 = "data/id_carr_1km_25m.tif"
 
 
 def main():
@@ -32,7 +36,7 @@ def main():
     communes = load_communes_shapefile(COMMUNES_PATH)  # Communes (GeoDataFrame)
     # (Optionnel: charger données population et socio-éco si disponibles)
     try:
-        pop_df = load_geoparquet_data("data/grid_1km.parquet")  # population par carreau (INSEE grille 1km)
+        pop_df = load_parquet_data("data/grid_1km.parquet")  # population par carreau (INSEE grille 1km)
     except FileNotFoundError:
         pop_df = None
     try:
@@ -42,10 +46,16 @@ def main():
 
     # 2. Rasterisation de la grille aux résolutions nécessaires et calcul des features par carreau
     # Raster ID aligné sur l'OCS (10m) pour l'occupation du sol
-    id_map_inv_10m = create_tile_id_raster(grid, RASTER_OCS_PATH, "data/grille1km_id_10m.tif", id_col="id_carr_1km")
+    if os.path.exists(raster_output):
+        os.remove(raster_output)
+    print(f"⚙️ Génération de {raster_output}...")
+    id_map_inv_10m = create_tile_id_raster(grid, RASTER_OCS_PATH, raster_output, id_col="id_carr_1km")
     ocs_df = compute_landcover_composition("data/grille1km_id_10m.tif", RASTER_OCS_PATH, id_map_inv_10m)
     # Raster ID aligné sur le MNT (25m) pour altitude/pente
-    id_map_inv_25m = create_tile_id_raster(grid, RASTER_DEM_PATH, "data/id_carr_1km_25m.tif", id_col="id_carr_1km")
+    if os.path.exists(raster_output_25):
+        os.remove(raster_output_25)
+    print(f"⚙️ Génération de {raster_output_25}...")
+    id_map_inv_25m = create_tile_id_raster(grid, RASTER_OCS_PATH, raster_output_25, id_col="id_carr_1km")
     alt_df = compute_altitude_stats("data/id_carr_1km_25m.tif", RASTER_DEM_PATH, RASTER_SLOPE_PATH, id_map_inv_25m)
     # 3. Fusion des features dans un seul DataFrame
     stats_df = pd.merge(alt_df, ocs_df, on="id_carr_1km", how="left")
@@ -110,7 +120,11 @@ def main():
 
     # 7. Construction des données macro
     edge_index, edge_attr, mapping_idx_code = build_macro_physical_graph(gdf_communes, gdf_routes)
-
+    torch.save({
+        'edge_index': edge_index,
+        'edge_attr': edge_attr,
+        'mapping': mapping_idx_code
+    }, "data_GNN/graph_macro_physique.pt")
     # 8. Construction des données macro (Flux & Socio-éco) - MANQUANT
     print("--- Traitement des flux Macro ---")
     # Définir les chemins (idéalement via config.yaml, sinon en constantes)

@@ -8,6 +8,9 @@ from bs4 import BeautifulSoup
 from pathlib import Path
 from urllib.parse import urlparse
 import time
+import os
+import rasterio
+from rasterio.errors import RasterioIOError
 
 # URL de base pour le téléchargement BD ALTI (25m ou 75m)
 BDALTI_BASE_URL = "https://geoservices.ign.fr/bdalti"
@@ -123,3 +126,20 @@ def download_bdalti(outdir: str, pattern: str = None, dry_run: bool = False):
         except Exception as e:
             print(f"[ERREUR] Échec du téléchargement pour {url} : {e}")
             continue
+
+
+def is_raster_valid(path):
+    """
+    Vérifie si un fichier raster existe et est lisible.
+    Retourne False si le fichier est corrompu ou inexistant.
+    """
+    if not os.path.exists(path):
+        return False
+        
+    try:
+        with rasterio.open(path) as src:
+            # On tente une lecture basique des métadonnées pour être sûr
+            _ = src.profile
+            return True
+    except (RasterioIOError, Exception):
+        return False
