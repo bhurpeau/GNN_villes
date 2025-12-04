@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 import torch
 import os
-from .data_io import run, load_grid_shapefile, load_communes_shapefile, load_csv_data, load_parquet_data, save_geoparquet_data, is_raster_valid
+from .data_io import run, load_grid_shapefile, load_communes_shapefile, load_csv_data, load_parquet_data, save_geoparquet_data
 from .tile_processing import create_tile_id_raster, compute_landcover_composition, compute_altitude_stats, assign_tiles_to_communes
 from .graph_utils import build_micro_intra_edges, build_macro_physical_graph
 from .cities_processing import process_macro_flows

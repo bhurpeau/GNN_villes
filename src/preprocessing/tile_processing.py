@@ -5,6 +5,7 @@ import geopandas as gpd
 import rasterio
 import numpy as np
 import pandas as pd
+import pickle
 from rasterio import features
 from rasterio.windows import Window
 from tqdm import tqdm
