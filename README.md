@@ -2,7 +2,7 @@
 
 > **Une approche "fractale" et auto-supervisée pour la typologie des villes françaises par GNN Hiérarchique.**
 
-*(Figure 1 : Architecture Hiérarchique Micro/Macro - Voir `GNN_Villes-1.pdf`)*
+![Figure 1](img/figure1.png "Architecture Hiérarchique Micro/Macro")
 
 ## 🎯 Objectif Scientifique
 
