@@ -1,11 +1,17 @@
 import torch
 import torch.nn.functional as F
+import os
 from torch_geometric.loader import DataLoader
 from tqdm import tqdm
 
 # Import de vos modules précédents
-from dataset import FranceHierarchicalDataset
-from model import HierarchicalGNN
+from .dataset import FranceHierarchicalDataset
+from .model import HierarchicalGNN
+
+# --- CHEMINS ROBUSTES ---
+CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
+PROJECT_ROOT = os.path.dirname(os.path.dirname(CURRENT_DIR))
+DATA_ROOT = os.path.join(PROJECT_ROOT, "data_GNN")
 
 # --- CONFIGURATION ---
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -53,7 +59,7 @@ def train():
     print(f"Initialisation sur {DEVICE}...")
 
     # 1. Chargement Données
-    dataset = FranceHierarchicalDataset(root="./data_GNN")
+    dataset = FranceHierarchicalDataset(root=DATA_ROOT)
 
     # On sépare Macro (élément 0) et la liste Micro (éléments 1 à fin)
     data_full = torch.load(dataset.processed_paths[0])
@@ -87,7 +93,7 @@ def train():
         for batch_micro in pbar:
             batch_micro = batch_micro.to(DEVICE)
             optimizer.zero_grad()
-
+            batch_micro.x_raw = batch_micro.x.clone()
             # 1. MASQUAGE INTELLIGENT
             x_input, mask_boolean = mask_variant_features(batch_micro.x, MASK_RATE)
             batch_micro.x = x_input
