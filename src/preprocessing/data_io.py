@@ -4,17 +4,23 @@
 import geopandas as gpd
 import pandas as pd
 import requests
-from bs4 import BeautifulSoup
-from pathlib import Path
-from urllib.parse import urlparse
+import subprocess
 import time
 import os
 import rasterio
+from bs4 import BeautifulSoup
+from pathlib import Path
+from urllib.parse import urlparse
 from rasterio.errors import RasterioIOError
 
 # URL de base pour le téléchargement BD ALTI (25m ou 75m)
 BDALTI_BASE_URL = "https://geoservices.ign.fr/bdalti"
 HEADERS = {"User-Agent": "BDALTI-downloader/1.0 (Python requests)"}
+
+
+def run(cmd):
+    print(">>", " ".join(cmd))
+    subprocess.run(cmd, check=True)
 
 
 def load_grid_shapefile(grid_path: str) -> gpd.GeoDataFrame:
@@ -135,7 +141,7 @@ def is_raster_valid(path):
     """
     if not os.path.exists(path):
         return False
-        
+
     try:
         with rasterio.open(path) as src:
             # On tente une lecture basique des métadonnées pour être sûr

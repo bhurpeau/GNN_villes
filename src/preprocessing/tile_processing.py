@@ -3,118 +3,156 @@
 
 import geopandas as gpd
 import rasterio
-from rasterio.features import rasterize
 import numpy as np
 import pandas as pd
+from rasterio import features
+from rasterio.windows import Window
+from tqdm import tqdm
 
 
-def create_tile_id_raster(grid_gdf: gpd.GeoDataFrame, reference_raster_path: str, 
+def create_tile_id_raster(grid_gdf: gpd.GeoDataFrame, reference_raster_path: str,
                           out_raster_path: str, id_col: str = "id_carr_1km") -> dict:
     """
-    Rasterise la grille de carreaux 1km en utilisant un raster de référence pour l'emprise et la résolution.
-    Chaque pixel du raster de sortie contient l'ID du carreau correspondant (0 si aucun).
-    Retourne un mapping inverse {id_int: id_carreau_original}.
+    Rasterisation optimisée avec Index Spatial (R-tree).
+    N'utilise que peu de RAM et va beaucoup plus vite.
     """
-    # Ouvrir le raster de référence pour obtenir dimensions, transform et CRS
-    with rasterio.open(reference_raster_path) as src_ref:
-        ref_crs = src_ref.crs
-        ref_transform = src_ref.transform
-        height = src_ref.height
-        width = src_ref.width
-        profile = src_ref.profile.copy()
+    # 0. Préparation des données vectorielles
+    grid = grid_gdf.reset_index(drop=True)
 
-    # Reprojection de la grille si nécessaire
-    if grid_gdf.crs != ref_crs:
-        grid = grid_gdf.to_crs(ref_crs)
-    else:
-        grid = grid_gdf
+    print("   -> Construction de l'index spatial...")
+    sindex = grid.sindex
 
-    # Construire un ID entier compact pour chaque carreau (pour rasterize)
+    # Mapping ID -> Entier
     unique_ids = sorted(grid[id_col].unique())
-    id_map = {val: i + 1 for i, val in enumerate(unique_ids)}   # 0 sera utilisé pour "aucun carreau"
+    id_map = {val: i + 1 for i, val in enumerate(unique_ids)}
     id_map_inv = {v: k for k, v in id_map.items()}
+    grid['raster_val'] = grid[id_col].map(id_map)
+    values_array = grid['raster_val'].values
+    geoms_array = grid.geometry.values
 
-    # Préparer les tuples (geometry, value) pour chaque carreau
-    shapes = [(geom, id_map[val]) for geom, val in zip(grid.geometry, grid[id_col])]
-    # Rasterisation de la grille
-    tile_id_array = rasterize(
-                            shapes=shapes,
-                            out_shape=(height, width),
-                            transform=ref_transform,
-                            fill=0,
-                            dtype="int32"
-                        )
+    # 1. Lecture de la référence
+    with rasterio.open(reference_raster_path) as src_ref:
+        profile = src_ref.profile.copy()
+        height, width = src_ref.height, src_ref.width
+        ref_transform = src_ref.transform
 
-    # Mettre à jour le profil raster pour le fichier de sortie
-    profile.update({
-        "dtype": "int32",
-        "count": 1,
-        "nodata": 0,
-        "compress": "LZW",
-        "tiled": True,
-        "blockxsize": 256,
-        "blockysize": 256,
-        "BIGTIFF": "IF_NEEDED",
-    })
-    # Enregistrer le raster d'identifiants de carreaux
-    with rasterio.open(out_raster_path, "w", **profile) as dst:
-        dst.write(tile_id_array, 1)
+    # 2. Config sortie
+    profile.update(
+        dtype=rasterio.int32,
+        count=1,
+        nodata=0,
+        compress='lzw',
+        tiled=True,
+        blockxsize=256,
+        blockysize=256,
+        bigtiff='IF_NEEDED'
+    )
+
+    # 3. Écriture intelligente
+    print(f"   -> Rasterisation ({width}x{height}) ...")
+
+    with rasterio.open(out_raster_path, 'w', **profile) as dst:
+        # Liste des fenêtres
+        windows_list = list(dst.block_windows(1))
+
+        for _, window in tqdm(windows_list, desc="Rasterisation"):
+
+            # A. Calcul de la boîte englobante de la fenêtre (en coordonnées géographiques)
+            win_bounds = rasterio.windows.bounds(window, ref_transform)
+
+            # B. Interrogation de l'index spatial
+            candidate_idxs = list(sindex.intersection(win_bounds))
+            if not candidate_idxs:
+                continue
+
+            # C. Préparation des shapes LOCALES uniquement
+            local_geoms = geoms_array[candidate_idxs]
+            local_vals = values_array[candidate_idxs]
+            local_shapes = list(zip(local_geoms, local_vals))
+
+            # D. Rasterisation locale
+            window_transform = rasterio.windows.transform(window, ref_transform)
+
+            img = features.rasterize(
+                local_shapes,
+                out_shape=(int(window.height), int(window.width)),
+                transform=window_transform,
+                fill=0,
+                default_value=0,
+                dtype=rasterio.int32
+            )
+
+            # E. Écriture
+            if img.max() > 0:
+                dst.write(img, 1, window=window)
+
+    print("✅ Rasterisation terminée.")
     return id_map_inv
 
 
-def compute_landcover_composition(tile_id_raster: str, landcover_raster: str, id_map_inv: dict) -> pd.DataFrame:
+def compute_landcover_composition(id_raster_path: str, ocs_raster_path: str, id_map_inv: dict) -> pd.DataFrame:
     """
-    Calcule la composition d'occupation du sol de chaque carreau.
-    Parcourt le raster d'occupation du sol et compte, pour chaque carreau (pixel du raster d'ID),
-    la distribution des classes d'occupation du sol.
-    Retourne un DataFrame avec une ligne par carreau et des colonnes part_classe_X pour chaque classe.
+    Calcule la composition OCS pour chaque carreau.
+    Version optimisée : Lecture par grands blocs + Comptage Numpy pur.
     """
-    counts = {}  # (id_int, classe) -> nombre de pixels
-    with rasterio.open(landcover_raster) as src_lc, rasterio.open(tile_id_raster) as src_tiles:
-        assert src_lc.width == src_tiles.width and src_lc.height == src_tiles.height
-        lc_nodata = src_lc.nodata
-        for _, window in src_lc.block_windows(1):
-            lc_block = src_lc.read(1, window=window)
-            tile_block = src_tiles.read(1, window=window)
-            # Aplatir les blocs en 1D
-            lc_flat = lc_block.ravel()
-            tile_flat = tile_block.ravel()
-            # Masque: pixels appartenant à un carreau (id > 0) et ayant une classe valide
-            mask = tile_flat > 0
-            if lc_nodata is not None:
-                mask &= (lc_flat != lc_nodata)
-            if not np.any(mask):
+    print("Calcul de la composition OCS...")
+
+    # 1. Préparation de la matrice de comptage
+    max_tile_id = max(id_map_inv.keys())
+    max_class_code = 255
+
+    # Matrice dense : Lignes = Carreaux, Colonnes = Classes OCS
+    counts_matrix = np.zeros((max_tile_id + 1, max_class_code + 1), dtype=np.uint32)
+
+    with rasterio.open(id_raster_path) as src_id, rasterio.open(ocs_raster_path) as src_ocs:
+        h, w = src_id.height, src_id.width
+        # 2. Définition d'une "Grosse Fenêtre" de lecture (2048x2048)
+        step = 2048
+        windows = []
+        for row_off in range(0, h, step):
+            height_window = min(step, h - row_off)
+            for col_off in range(0, w, step):
+                width_window = min(step, w - col_off)
+                windows.append(Window(col_off, row_off, width_window, height_window))
+
+        # 3. Boucle de lecture
+        for win in tqdm(windows, desc="Analyse OCS"):
+            data_id = src_id.read(1, window=win)
+            if data_id.max() == 0:
                 continue
-            tile_vals = tile_flat[mask]
-            class_vals = lc_flat[mask]
-            # Comptage des paires (tile_id_int, classe) sur ce bloc
-            pairs = np.stack([tile_vals, class_vals], axis=1)
-            uniq_pairs, counts_pairs = np.unique(pairs, axis=0, return_counts=True)
-            for (tile_int, classe), cnt in zip(uniq_pairs, counts_pairs):
-                counts[(int(tile_int), int(classe))] = counts.get((int(tile_int), int(classe)), 0) + int(cnt)
-    # Construire le DataFrame long
-    data_rows = []
-    for (tile_int, classe), nb in counts.items():
-        data_rows.append({
-            "id_carr_1km_int": tile_int,
-            "classe": classe,
-            "nb_pixels": nb
-        })
-    df_long = pd.DataFrame(data_rows)
-    # Ajouter l'ID carreau d'origine via le mapping inverse
-    df_long["id_carr_1km"] = df_long["id_carr_1km_int"].map(id_map_inv)
-    # Calcul de la surface en m² couverte par chaque classe dans le carreau
-    with rasterio.open(landcover_raster) as src_lc:
-        px_width, px_height = src_lc.res  # résolution du pixel en unités de la projection
-    df_long["surface_m2"] = df_long["nb_pixels"] * abs(px_width * px_height)
-    # Calcul du pourcentage de pixels par classe dans le carreau
-    df_long["total_pixels"] = df_long.groupby("id_carr_1km")["nb_pixels"].transform("sum")
-    df_long["part_pixels"] = df_long["nb_pixels"] / df_long["total_pixels"]
-    # Pivot en format large: une colonne par classe (part_classe_X)
-    df_wide = df_long.pivot(index="id_carr_1km", columns="classe", values="part_pixels").fillna(0)
-    df_wide.columns = [f"part_classe_{int(c)}" for c in df_wide.columns]
-    df_wide.reset_index(inplace=True)
-    return df_wide
+
+            data_ocs = src_ocs.read(1, window=win)
+            # 4. Comptage vectorisé
+            mask = data_id > 0
+            valid_ids = data_id[mask]
+            valid_classes = data_ocs[mask]
+            valid_mask = valid_classes <= max_class_code
+            valid_ids = valid_ids[valid_mask]
+            valid_classes = valid_classes[valid_mask]
+            if len(valid_ids) > 0:
+                np.add.at(counts_matrix, (valid_ids, valid_classes), 1)
+
+    # 5. Conversion finale en DataFrame
+    print("   -> Conversion en tableau Pandas...")
+    present_classes = np.where(counts_matrix.sum(axis=0) > 0)[0]
+
+    # Construction du DF
+    final_data = counts_matrix[1:, present_classes]
+
+    # Noms de colonnes
+    col_names = [f"part_classe_{c}" for c in present_classes]
+
+    df = pd.DataFrame(final_data, columns=col_names)
+    df["id_int"] = np.arange(1, max_tile_id + 1)
+
+    df["id_carr_1km"] = df["id_int"].map(id_map_inv)
+
+    total_pixels = df[col_names].sum(axis=1)
+    for col in col_names:
+        df[col] = df[col] / total_pixels.replace(0, 1) # Évite div/0
+
+    # Nettoyage
+    return df.drop(columns=["id_int"])
 
 
 def compute_altitude_stats(tile_id_raster: str, dem_raster: str, slope_raster: str, id_map_inv: dict) -> pd.DataFrame:

@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 import torch
 import os
-from .data_io import load_grid_shapefile, load_communes_shapefile, load_csv_data, load_parquet_data, save_geoparquet_data, is_raster_valid
+from .data_io import run, load_grid_shapefile, load_communes_shapefile, load_csv_data, load_parquet_data, save_geoparquet_data, is_raster_valid
 from .tile_processing import create_tile_id_raster, compute_landcover_composition, compute_altitude_stats, assign_tiles_to_communes
 from .graph_utils import build_micro_intra_edges, build_macro_physical_graph
 from .cities_processing import process_macro_flows
@@ -28,13 +28,14 @@ OUT_TILE_FEATURES = "data_GNN/statistiques_carreaux.parquet.gz"
 OUT_EDGES_ALL = "data_GNN/edges_toutes_communes.npy"
 raster_output = "data/grille1km_id_10m.tif"
 raster_output_25 = "data/id_carr_1km_25m.tif"
+# IDMAP_PKL = "data/grille1km_id_10m_idmap.pkl"
+# IDMAP_PKL_25 = "data/grille1km_id_25m_idmap.pkl"
 
 
 def main():
     # 1. Charger les données de base
     grid = load_grid_shapefile(GRID_PATH)            # Grille 1km (GeoDataFrame)
     communes = load_communes_shapefile(COMMUNES_PATH)  # Communes (GeoDataFrame)
-    # (Optionnel: charger données population et socio-éco si disponibles)
     try:
         pop_df = load_parquet_data("data/grid_1km.parquet")  # population par carreau (INSEE grille 1km)
     except FileNotFoundError:
@@ -50,13 +51,23 @@ def main():
         os.remove(raster_output)
     print(f"⚙️ Génération de {raster_output}...")
     id_map_inv_10m = create_tile_id_raster(grid, RASTER_OCS_PATH, raster_output, id_col="id_carr_1km")
-    ocs_df = compute_landcover_composition("data/grille1km_id_10m.tif", RASTER_OCS_PATH, id_map_inv_10m)
+    ocs_df = compute_landcover_composition(raster_output, RASTER_OCS_PATH, id_map_inv_10m)
     # Raster ID aligné sur le MNT (25m) pour altitude/pente
     if os.path.exists(raster_output_25):
         os.remove(raster_output_25)
     print(f"⚙️ Génération de {raster_output_25}...")
     id_map_inv_25m = create_tile_id_raster(grid, RASTER_OCS_PATH, raster_output_25, id_col="id_carr_1km")
-    alt_df = compute_altitude_stats("data/id_carr_1km_25m.tif", RASTER_DEM_PATH, RASTER_SLOPE_PATH, id_map_inv_25m)
+    if os.path.exists(RASTER_SLOPE_PATH):
+        os.remove(RASTER_SLOPE_PATH)
+    cmd = [
+            'gdaldem',
+            'slope',
+            RASTER_DEM_PATH,
+            RASTER_SLOPE_PATH,
+            '-compute_edges'
+            ]
+    run(cmd)
+    alt_df = compute_altitude_stats(raster_output_25, RASTER_DEM_PATH, RASTER_SLOPE_PATH, id_map_inv_25m)
     # 3. Fusion des features dans un seul DataFrame
     stats_df = pd.merge(alt_df, ocs_df, on="id_carr_1km", how="left")
     # Ajouter population et socio-éco si disponibles
