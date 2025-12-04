@@ -84,9 +84,38 @@ class FranceHierarchicalDataset(InMemoryDataset):
             "is_imputed",
         ]
 
-        x_inv = torch.tensor(df_micro[cols_invariant].values, dtype=torch.float)
-        x_var = torch.tensor(df_micro[cols_variant].values, dtype=torch.float)
-        x_micro = torch.cat([x_inv, x_var], dim=1)  # Dim totale = 9 + 8 = 17
+        x_invariant = torch.tensor(df_micro[cols_invariant].values, dtype=torch.float)
+        x_variant = torch.tensor(df_micro[cols_variant].values, dtype=torch.float)
+
+        # 2. STANDARDISATION (Calcul sur tout le dataset)
+
+        # A. Invariants
+        mean_inv = x_invariant.mean(dim=0)
+        std_inv = x_invariant.std(dim=0)
+        std_inv[std_inv == 0] = 1.0
+        x_inv_scaled = (x_invariant - mean_inv) / std_inv
+
+        # B. Variants (Attention au flag is_imputed)
+        x_var_continuous = x_variant[:, :-1]
+        x_var_flag = x_variant[:, -1:]  # colonne is_imputed
+
+        mean_var = x_var_continuous.mean(dim=0)
+        std_var = x_var_continuous.std(dim=0)
+        std_var[std_var == 0] = 1.0
+
+        x_var_scaled = (x_var_continuous - mean_var) / std_var
+        x_variant_final = torch.cat([x_var_scaled, x_var_flag], dim=1)
+
+        x_micro = torch.cat([x_inv_scaled, x_variant_final], dim=1)
+
+        # 3. SAUVEGARDE DES STATS
+        stats = {
+            "mean_inv": mean_inv,
+            "std_inv": std_inv,
+            "mean_var": mean_var,
+            "std_var": std_var,
+        }
+        torch.save(stats, self.processed_paths[0] + ".stats")
 
         # Découpage par commune
         edges_global = np.load(self.raw_paths[1])

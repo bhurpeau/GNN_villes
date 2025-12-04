@@ -12,7 +12,13 @@ DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 BATCH_SIZE_MICRO = 64  # Nombre de communes par batch
 EPOCHS = 20
 LR = 0.001
-MASK_RATE = 0.15  # 15% des features sont masquées (comme BERT)
+MASK_RATE = 0.15
+
+# Indices des colonnes dans le tenseur x (selon dataset.py)
+IDX_INVARIANT_START = 0
+IDX_INVARIANT_END = 9
+IDX_VARIANT_START = 9
+IDX_VARIANT_END = 17
 
 
 def mask_features(x, mask_rate):
@@ -24,6 +30,23 @@ def mask_features(x, mask_rate):
     x_masked = x.clone()
     x_masked[mask] = 0.0  # On remplace par 0 (ou bruit gaussien)
     return x_masked, mask, x
+
+
+def mask_variant_features(x, mask_rate=0.5):
+    """
+    Masque uniquement les variables sociales.
+    On laisse la structure physique intacte car elle sert de point d'appui.
+    """
+    x_masked = x.clone()
+
+    # Création du masque uniquement pour la partie variante
+    # Shape [N_nodes, 8]
+    variant_part = x[:, IDX_VARIANT_START:IDX_VARIANT_END]
+    mask = torch.rand(variant_part.size()) < mask_rate
+
+    x_masked[:, IDX_VARIANT_START:IDX_VARIANT_END][mask] = 0.0
+
+    return x_masked, mask
 
 
 def train():
@@ -41,18 +64,15 @@ def train():
     loader = DataLoader(data_list_micro, batch_size=BATCH_SIZE_MICRO, shuffle=True)
 
     # 2. Modèle & Optimiseur
-    model = HierarchicalGNN(micro_input_dim=17, macro_input_dim=2, latent_dim=32).to(
-        DEVICE
-    )
+    model = HierarchicalGNN(
+        micro_input_dim=17, macro_input_dim=2, latent_dim=32, social_output_dim=8
+    ).to(DEVICE)
 
     optimizer = torch.optim.Adam(model.parameters(), lr=LR)
 
     # 3. BUFFER GLOBAL Z_MORPHO
-    # Astuce : On stocke les embeddings de TOUTES les communes (35k) ici.
-    # Au début, c'est des zéros (ou bruit). Il va s'affiner à chaque époque.
     num_communes = data_macro.x.size(0)
     z_global_buffer = torch.zeros((num_communes, 32)).to(DEVICE)
-    # On détache le gradient pour l'historique (pour ne pas exploser la mémoire)
     z_global_buffer.requires_grad = False
 
     print("Début de l'entraînement...")
@@ -68,69 +88,40 @@ def train():
             batch_micro = batch_micro.to(DEVICE)
             optimizer.zero_grad()
 
-            # --- A. Masquage (Auto-supervision) ---
-            # On masque les features d'entrée du niveau Micro
-            # Le but est de reconstruire x_target en utilisant la structure et le contexte
-            x_masked, mask, x_target = mask_features(batch_micro.x, MASK_RATE)
-            batch_micro.x = x_masked  # Injection des features masquées
+            # 1. MASQUAGE INTELLIGENT
+            x_input, mask_boolean = mask_variant_features(batch_micro.x, MASK_RATE)
+            batch_micro.x = x_input
 
-            # --- B. Forward Micro ---
-            # On calcule les signatures Z pour ce batch uniquement
+            # 2. FORWARD PASS (Micro -> Buffer -> Macro)
             z_batch = model.forward_micro(batch_micro)
 
-            # --- C. Intégration dans le Buffer (Le pont Micro-Macro) ---
-            # batch_micro.code_insee n'est pas dispo directement dans le Batch PyG standard
-            # Astuce : On utilise l'attribut 'batch' ou on suppose que le DataLoader
-            # renvoie les données dans un ordre qu'on peut mapper.
-            # ICI : Pour simplifier, supposons que data_list_micro a un attribut 'global_idx'
-            # (Il faudra l'ajouter au dataset si absent, voir Note en bas)
-
-            # Solution temporaire robuste : On utilise l'attribut ajouté manuellement
-            # Supposons que dans Dataset.py on ait ajouté : data.global_idx = i
             global_indices = batch_micro.global_idx
-
-            # Mise à jour du buffer :
-            # On prend le buffer existant (détaché)
             z_context = z_global_buffer.clone()
-            # On y insère nos nouveaux Z (qui gardent leur gradient !)
             z_context[global_indices] = z_batch
 
-            # --- D. Forward Macro ---
-            # On lance le GAT sur TOUT le graphe, mais le gradient ne passera
-            # que par les nœuds du batch (grâce à z_batch)
             z_final = model.forward_macro(z_context, data_macro)
 
-            # --- E. Reconstruction / Prédiction ---
-            # On essaie de prédire les valeurs masquées des communes DU BATCH
-            # Pour cela, on projette z_final vers l'espace des features initiales
-            # (Nécessite d'ajouter un decodeur au modèle, ici simplifié)
+            # 3. RECONSTRUCTION
+            z_batch_final = z_final[global_indices]
 
-            # Pour l'exemple, supposons qu'on veuille reconstruire une propriété globale de la commune
-            # (ex: densité moyenne masquée) à partir de Z_final
+            social_reconstruction = model.decode(z_batch_final)
 
-            # Simplification : On utilise une loss sur l'embedding lui-même ou une tâche proxy
-            # Tâche papier : Reconstruction. Ajoutons une tête de reconstruction temporaire.
-            reconstruction = model.predictor(z_final[global_indices])
-
-            # Cible : Par exemple, reconstruire la densité moyenne réelle (qui était dans x_target)
-            # On extrait la densité moyenne cible pour chaque commune du batch
-            # (Nécessite un pooling manuel rapide sur x_target)
-            target_vals = []
+            # 4. PRÉPARATION Ground Truth
+            target_social_list = []
             for i in range(len(global_indices)):
                 mask_commune = batch_micro.batch == i
-                # On vise la reconstruction de la 1ere variable variante (densité)
-                val = x_target[mask_commune, 9].mean()
-                target_vals.append(val)
-            target_tensor = torch.stack(target_vals).unsqueeze(1)
+                real_profile = batch_micro.x_raw[
+                    mask_commune, IDX_VARIANT_START:IDX_VARIANT_END
+                ].mean(dim=0)
+                target_social_list.append(real_profile)
 
-            # --- F. Loss & Backprop ---
-            loss = F.mse_loss(reconstruction, target_tensor)
+            target_social = torch.stack(target_social_list)  # Shape [Batch, 8]
+
+            # 5. CALCUL DE LA LOSS
+            loss = F.mse_loss(social_reconstruction, target_social)
 
             loss.backward()
             optimizer.step()
-
-            # Mise à jour du buffer "offline" pour le prochain tour
-            # (On détache pour casser le graphe de calcul)
             z_global_buffer[global_indices] = z_batch.detach()
 
             total_loss += loss.item()

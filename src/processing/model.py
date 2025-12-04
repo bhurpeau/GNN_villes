@@ -12,6 +12,7 @@ class HierarchicalGNN(nn.Module):
         hidden_dim=64,
         latent_dim=32,  # Taille du vecteur Z_morpho
         num_heads=4,
+        social_output_dim=8,
     ):
         super(HierarchicalGNN, self).__init__()
 
@@ -37,8 +38,12 @@ class HierarchicalGNN(nn.Module):
         self.macro_gat2 = GATv2Conv(
             hidden_dim * num_heads, latent_dim, heads=1, edge_dim=4, concat=False
         )
-        # Tête de prédiction (pour l'auto-supervision)
-        self.predictor = nn.Linear(latent_dim, 1)
+        # Décodeur (pour l'auto-supervision)
+        self.predictself.decoder = nn.Sequential(
+            nn.Linear(latent_dim, hidden_dim),
+            nn.ReLU(),
+            nn.Linear(hidden_dim, social_output_dim),
+        )
 
     def forward_micro(self, data_micro):
         """Étape 1 : Calculer Z_morpho pour un batch de communes"""
@@ -67,3 +72,7 @@ class HierarchicalGNN(nn.Module):
             x, data_macro.edge_index, edge_attr=data_macro.edge_attr
         )
         return z_final
+
+    def decode(self, z_final):
+        """Tente de reconstruire les stats sociales à partir de la signature latente"""
+        return self.decoder(z_final)
