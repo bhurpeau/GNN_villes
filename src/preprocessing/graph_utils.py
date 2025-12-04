@@ -23,18 +23,18 @@ def build_micro_intra_edges(df_tiles):
 
     # 2. Filtrage : On ne garde que les liens au sein de la MÊME commune
     # On mappe les codes communes
-    communes = df_tiles['code'].values
-    adj['commune_src'] = communes[adj['focal']]
-    adj['commune_dst'] = communes[adj['neighbor']]
+    communes = df_tiles["code"].values
+    adj["commune_src"] = communes[adj["focal"]]
+    adj["commune_dst"] = communes[adj["neighbor"]]
 
-    mask_internal = adj['commune_src'] == adj['commune_dst']
+    mask_internal = adj["commune_src"] == adj["commune_dst"]
     internal_edges = adj[mask_internal]
 
     # 3. Conversion en Tenseur
-    edge_index = torch.tensor([
-        internal_edges['focal'].values,
-        internal_edges['neighbor'].values
-    ], dtype=torch.long)
+    edge_index = torch.tensor(
+        [internal_edges["focal"].values, internal_edges["neighbor"].values],
+        dtype=torch.long,
+    )
 
     print(f"-> {edge_index.shape[1]} arêtes micro internes générées.")
     return edge_index
@@ -49,27 +49,27 @@ def build_macro_physical_graph(gdf_communes, gdf_routes):
 
     # 1. Préparation
     gdf = gdf_communes.reset_index(drop=True).copy()
-    gdf['node_idx'] = gdf.index
-    mapping_idx_code = gdf['code'].to_dict()
+    gdf["node_idx"] = gdf.index
+    mapping_idx_code = gdf["code"].to_dict()
 
     # Buffer de sécurité pour la topologie
-    gdf['geometry'] = gdf.geometry.buffer(0.1)
+    gdf["geometry"] = gdf.geometry.buffer(0.1)
 
     # 2. Détection des voisins (Spatial Join)
     print("   -> Détection des frontières...")
     adj = gpd.sjoin(
-        gdf[['geometry', 'node_idx']], 
-        gdf[['geometry', 'node_idx']], 
-        how='inner', 
-        predicate='intersects'
+        gdf[["geometry", "node_idx"]],
+        gdf[["geometry", "node_idx"]],
+        how="inner",
+        predicate="intersects",
     )
     # Retirer les auto-boucles
-    adj = adj[adj['node_idx_left'] != adj['node_idx_right']]
+    adj = adj[adj["node_idx_left"] != adj["node_idx_right"]]
 
     # 3. Calcul des longueurs (Vectorisé)
     print("   -> Calcul des longueurs...")
-    geom_src = gdf.loc[adj['node_idx_left'], 'geometry'].values
-    geom_dst = gdf.loc[adj['node_idx_right'], 'geometry'].values
+    geom_src = gdf.loc[adj["node_idx_left"], "geometry"].values
+    geom_dst = gdf.loc[adj["node_idx_right"], "geometry"].values
 
     # Intersection vectorielle
     intersections = gpd.GeoSeries(geom_src).intersection(gpd.GeoSeries(geom_dst))
@@ -79,8 +79,8 @@ def build_macro_physical_graph(gdf_communes, gdf_routes):
     # On ne garde que > 1m
     mask_valid = (lengths > 1.0).values
 
-    final_src = adj['node_idx_left'].values[mask_valid]
-    final_dst = adj['node_idx_right'].values[mask_valid]
+    final_src = adj["node_idx_left"].values[mask_valid]
+    final_dst = adj["node_idx_right"].values[mask_valid]
     final_len = lengths.values[mask_valid]
 
     print(f"   -> {len(final_src)} frontières valides.")
@@ -88,9 +88,7 @@ def build_macro_physical_graph(gdf_communes, gdf_routes):
     # 5. Calcul des Routes (Perméabilité)
     # On appelle la sous-fonction optimisée
     print("   -> Calcul de la perméabilité routière...")
-    road_counts = _compute_road_crossings(
-        final_src, final_dst, gdf, gdf_routes
-    )
+    road_counts = _compute_road_crossings(final_src, final_dst, gdf, gdf_routes)
 
     # 6. Assemblage Final
     edge_index = torch.tensor([final_src, final_dst], dtype=torch.long)
@@ -113,21 +111,21 @@ def _compute_road_crossings(src_idx, dst_idx, gdf_communes, gdf_routes):
 
     # Poids des routes (Feature Engineering)
     # Adaptez 'NATURE' selon votre BD TOPO
-    if 'IMPORTANCE' in gdf_routes.columns:
+    if "IMPORTANCE" in gdf_routes.columns:
         poids_route = {
-            '1': 10.0,
-            '2': 8.0,
-            '3': 5.0,
-            '4': 3.0,
-            '5': 1.0,
-            '6': 0.0,
+            "1": 10.0,
+            "2": 8.0,
+            "3": 5.0,
+            "4": 3.0,
+            "5": 1.0,
+            "6": 0.0,
         }
         # On map et on remplit les inconnus par 1.0 (Route standard)
-        route_weights = gdf_routes['IMPORTANCE'].map(poids_route).fillna(1.0).values
+        route_weights = gdf_routes["IMPORTANCE"].map(poids_route).fillna(1.0).values
     else:
         route_weights = np.ones(len(gdf_routes))
 
-    gdf_routes['w_calc'] = route_weights
+    gdf_routes["w_calc"] = route_weights
 
     geoms = gdf_communes.geometry.values
     results = []
@@ -142,7 +140,7 @@ def _compute_road_crossings(src_idx, dst_idx, gdf_communes, gdf_routes):
 
         # 1. Filtre Spatial Rapide (Bounding Box)
         # Renvoie les indices entiers des routes candidates
-        candidate_ids = list(routes_sindex.query(boundary, predicate='intersects'))
+        candidate_ids = list(routes_sindex.query(boundary, predicate="intersects"))
 
         if not candidate_ids:
             results.append(0.0)
@@ -155,7 +153,7 @@ def _compute_road_crossings(src_idx, dst_idx, gdf_communes, gdf_routes):
         if real_inter.empty:
             results.append(0.0)
         else:
-            results.append(real_inter['w_calc'].sum())
+            results.append(real_inter["w_calc"].sum())
 
         if i % 10000 == 0:
             print(f"      ... {i}/{len(src_idx)} traités")

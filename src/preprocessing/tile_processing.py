@@ -11,8 +11,12 @@ from rasterio.windows import Window
 from tqdm import tqdm
 
 
-def create_tile_id_raster(grid_gdf: gpd.GeoDataFrame, reference_raster_path: str,
-                          out_raster_path: str, id_col: str = "id_carr_1km") -> dict:
+def create_tile_id_raster(
+    grid_gdf: gpd.GeoDataFrame,
+    reference_raster_path: str,
+    out_raster_path: str,
+    id_col: str = "id_carr_1km",
+) -> dict:
     """
     Rasterisation optimisée avec Index Spatial (R-tree).
     N'utilise que peu de RAM et va beaucoup plus vite.
@@ -27,8 +31,8 @@ def create_tile_id_raster(grid_gdf: gpd.GeoDataFrame, reference_raster_path: str
     unique_ids = sorted(grid[id_col].unique())
     id_map = {val: i + 1 for i, val in enumerate(unique_ids)}
     id_map_inv = {v: k for k, v in id_map.items()}
-    grid['raster_val'] = grid[id_col].map(id_map)
-    values_array = grid['raster_val'].values
+    grid["raster_val"] = grid[id_col].map(id_map)
+    values_array = grid["raster_val"].values
     geoms_array = grid.geometry.values
 
     # 1. Lecture de la référence
@@ -42,17 +46,17 @@ def create_tile_id_raster(grid_gdf: gpd.GeoDataFrame, reference_raster_path: str
         dtype=rasterio.int32,
         count=1,
         nodata=0,
-        compress='lzw',
+        compress="lzw",
         tiled=True,
         blockxsize=256,
         blockysize=256,
-        bigtiff='IF_NEEDED'
+        bigtiff="IF_NEEDED",
     )
 
     # 3. Écriture intelligente
     print(f"   -> Rasterisation ({width}x{height}) ...")
 
-    with rasterio.open(out_raster_path, 'w', **profile) as dst:
+    with rasterio.open(out_raster_path, "w", **profile) as dst:
         # Liste des fenêtres
         windows_list = list(dst.block_windows(1))
 
@@ -80,7 +84,7 @@ def create_tile_id_raster(grid_gdf: gpd.GeoDataFrame, reference_raster_path: str
                 transform=window_transform,
                 fill=0,
                 default_value=0,
-                dtype=rasterio.int32
+                dtype=rasterio.int32,
             )
 
             # E. Écriture
@@ -91,7 +95,9 @@ def create_tile_id_raster(grid_gdf: gpd.GeoDataFrame, reference_raster_path: str
     return id_map_inv
 
 
-def compute_landcover_composition(id_raster_path: str, ocs_raster_path: str, id_map_inv: dict) -> pd.DataFrame:
+def compute_landcover_composition(
+    id_raster_path: str, ocs_raster_path: str, id_map_inv: dict
+) -> pd.DataFrame:
     """
     Calcule la composition OCS pour chaque carreau.
     Version optimisée : Lecture par grands blocs + Comptage Numpy pur.
@@ -105,7 +111,10 @@ def compute_landcover_composition(id_raster_path: str, ocs_raster_path: str, id_
     # Matrice dense : Lignes = Carreaux, Colonnes = Classes OCS
     counts_matrix = np.zeros((max_tile_id + 1, max_class_code + 1), dtype=np.uint32)
 
-    with rasterio.open(id_raster_path) as src_id, rasterio.open(ocs_raster_path) as src_ocs:
+    with (
+        rasterio.open(id_raster_path) as src_id,
+        rasterio.open(ocs_raster_path) as src_ocs,
+    ):
         h, w = src_id.height, src_id.width
         # 2. Définition d'une "Grosse Fenêtre" de lecture (2048x2048)
         step = 2048
@@ -150,29 +159,35 @@ def compute_landcover_composition(id_raster_path: str, ocs_raster_path: str, id_
 
     total_pixels = df[col_names].sum(axis=1)
     for col in col_names:
-        df[col] = df[col] / total_pixels.replace(0, 1) # Évite div/0
+        df[col] = df[col] / total_pixels.replace(0, 1)  # Évite div/0
 
     # Nettoyage
     return df.drop(columns=["id_int"])
 
 
-def compute_altitude_stats(tile_id_raster: str, dem_raster: str, slope_raster: str, id_map_inv: dict) -> pd.DataFrame:
+def compute_altitude_stats(
+    tile_id_raster: str, dem_raster: str, slope_raster: str, id_map_inv: dict
+) -> pd.DataFrame:
     """
     Calcule l'altitude moyenne, l'écart-type et la pente moyenne par carreau.
     Parcourt le MNT (DEM) et le raster de pente par blocs pour agréger les statistiques sur chaque carreau.
     Retourne un DataFrame avec les colonnes: id_carr_1km, z_mean, z_std, slope_mean.
     """
     # Charger le mapping inverse (id raster -> id carreau réel)
-    with rasterio.open(tile_id_raster) as src_tile, \
-         rasterio.open(dem_raster) as src_dem, \
-         rasterio.open(slope_raster) as src_slope:
+    with (
+        rasterio.open(tile_id_raster) as src_tile,
+        rasterio.open(dem_raster) as src_dem,
+        rasterio.open(slope_raster) as src_slope,
+    ):
         assert src_dem.width == src_slope.width == src_tile.width
         assert src_dem.height == src_slope.height == src_tile.height
         dem_nodata = src_dem.nodata
         slope_nodata = src_slope.nodata
 
         # Préparation des accumulateurs (index 0 ignoré, indices 1..N pour carreaux)
-        N = int(src_tile.read(1).max())  # nombre total de carreaux (valeur max dans le raster ID)
+        N = int(
+            src_tile.read(1).max()
+        )  # nombre total de carreaux (valeur max dans le raster ID)
         count = np.zeros(N + 1, dtype=np.int64)
         sum_z = np.zeros(N + 1, dtype=np.float64)
         sum_z2 = np.zeros(N + 1, dtype=np.float64)
@@ -189,45 +204,53 @@ def compute_altitude_stats(tile_id_raster: str, dem_raster: str, slope_raster: s
             # Masque: pixels appartenant à un carreau (id > 0) et valides pour DEM et pente
             mask = tile_flat > 0
             if dem_nodata is not None:
-                mask &= (dem_flat != dem_nodata)
+                mask &= dem_flat != dem_nodata
             if slope_nodata is not None:
-                mask &= (slope_flat != slope_nodata)
+                mask &= slope_flat != slope_nodata
             if not np.any(mask):
                 continue
             t = tile_flat[mask].astype(int)
             z = dem_flat[mask].astype(np.float64)
             s = slope_flat[mask].astype(np.float64)
             # Agrégation par carreau via np.bincount
-            count += np.bincount(t, minlength=N+1)
-            sum_z += np.bincount(t, weights=z, minlength=N+1)
-            sum_z2 += np.bincount(t, weights=z * z, minlength=N+1)
-            sum_slope += np.bincount(t, weights=s, minlength=N+1)
+            count += np.bincount(t, minlength=N + 1)
+            sum_z += np.bincount(t, weights=z, minlength=N + 1)
+            sum_z2 += np.bincount(t, weights=z * z, minlength=N + 1)
+            sum_slope += np.bincount(t, weights=s, minlength=N + 1)
 
     # Calcul des statistiques pour chaque carreau (en excluant l'index 0 qui correspond à "aucun carreau")
-    idx = np.arange(1, N+1)
+    idx = np.arange(1, N + 1)
     valid = count[idx] > 0
     id_int = idx[valid]
     n = count[id_int]
     mean_z = sum_z[id_int] / n
-    var_z = (sum_z2[id_int] / n) - (mean_z ** 2)
+    var_z = (sum_z2[id_int] / n) - (mean_z**2)
     var_z[var_z < 0] = 0  # évite de petites valeurs négatives dues aux arrondis
     std_z = np.sqrt(var_z)
     mean_slope = sum_slope[id_int] / n
 
     # Créer le DataFrame des stats altimétriques
-    original_ids = [id_map_inv[i] for i in id_int]  # remapper indices internes vers ID carreau original
-    df_alt = pd.DataFrame({
-        "id_carr_1km": original_ids,
-        "z_mean": mean_z,
-        "z_std": std_z,
-        "slope_mean": mean_slope
-    })
+    original_ids = [
+        id_map_inv[i] for i in id_int
+    ]  # remapper indices internes vers ID carreau original
+    df_alt = pd.DataFrame(
+        {
+            "id_carr_1km": original_ids,
+            "z_mean": mean_z,
+            "z_std": std_z,
+            "slope_mean": mean_slope,
+        }
+    )
     return df_alt
 
 
-def assign_tiles_to_communes(grid_gdf: gpd.GeoDataFrame, communes_gdf: gpd.GeoDataFrame, 
-                             id_col: str = "id_carr_1km", commune_code_col: str = "code",
-                             nearest_distance: float = 2000.0) -> pd.Series:
+def assign_tiles_to_communes(
+    grid_gdf: gpd.GeoDataFrame,
+    communes_gdf: gpd.GeoDataFrame,
+    id_col: str = "id_carr_1km",
+    commune_code_col: str = "code",
+    nearest_distance: float = 2000.0,
+) -> pd.Series:
     """
     Attribue chaque carreau 1km à une commune.
     - Utilise une intersection spatiale pour déterminer la commune couvrant la plus grande partie du carreau.
@@ -235,13 +258,17 @@ def assign_tiles_to_communes(grid_gdf: gpd.GeoDataFrame, communes_gdf: gpd.GeoDa
     Retourne une Series indexée par id_carr_1km donnant le code commune assigné.
     """
     # Intersection carreaux/communes pour trouver les chevauchements
-    pieces = gpd.overlay(grid_gdf, communes_gdf[[commune_code_col, 'geometry']], how='intersection')
-    pieces['area'] = pieces.geometry.area
+    pieces = gpd.overlay(
+        grid_gdf, communes_gdf[[commune_code_col, "geometry"]], how="intersection"
+    )
+    pieces["area"] = pieces.geometry.area
     # Trier par aire décroissante pour chaque carreau
-    pieces = pieces.sort_values(['id_carr_1km', 'area'], ascending=[True, False])
+    pieces = pieces.sort_values(["id_carr_1km", "area"], ascending=[True, False])
     # Garder la commune principale par carreau (la plus grande surface)
-    main_assignments = pieces.drop_duplicates(subset=[id_col], keep='first')
-    mapping = pd.Series(main_assignments[commune_code_col].values, index=main_assignments[id_col].values)
+    main_assignments = pieces.drop_duplicates(subset=[id_col], keep="first")
+    mapping = pd.Series(
+        main_assignments[commune_code_col].values, index=main_assignments[id_col].values
+    )
     # Identifier les carreaux sans commune (pas d'intersection)
     all_tiles = set(grid_gdf[id_col])
     assigned_tiles = set(mapping.index)
@@ -249,9 +276,14 @@ def assign_tiles_to_communes(grid_gdf: gpd.GeoDataFrame, communes_gdf: gpd.GeoDa
     if orphans:
         orphans_gdf = grid_gdf[grid_gdf[id_col].isin(orphans)]
         # Trouver pour chaque carreau orphelin la commune la plus proche (jointure spatiale nearest)
-        nearest = gpd.sjoin_nearest(orphans_gdf, communes_gdf[[commune_code_col, 'geometry']], how='left', distance_col='dist_to_commune')
+        nearest = gpd.sjoin_nearest(
+            orphans_gdf,
+            communes_gdf[[commune_code_col, "geometry"]],
+            how="left",
+            distance_col="dist_to_commune",
+        )
         # Filtrer les attributions trop lointaines
-        nearest_valid = nearest[nearest['dist_to_commune'] < nearest_distance]
+        nearest_valid = nearest[nearest["dist_to_commune"] < nearest_distance]
         for _, row in nearest_valid.iterrows():
             mapping[row[id_col]] = row[commune_code_col]
     return mapping

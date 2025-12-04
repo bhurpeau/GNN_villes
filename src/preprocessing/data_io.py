@@ -40,12 +40,12 @@ def load_csv_data(csv_path: str, sep: str = None) -> pd.DataFrame:
     if sep is not None:
         return pd.read_csv(csv_path, sep=sep)
     # Auto-détection du séparateur pour éviter les erreurs silencieuses
-    with open(csv_path, 'r', encoding='utf-8') as f:
+    with open(csv_path, "r", encoding="utf-8") as f:
         first_line = f.readline()
-        if first_line.count(';') > first_line.count(','):
-            return pd.read_csv(csv_path, sep=';')
+        if first_line.count(";") > first_line.count(","):
+            return pd.read_csv(csv_path, sep=";")
         else:
-            return pd.read_csv(csv_path, sep=',')
+            return pd.read_csv(csv_path, sep=",")
 
 
 def load_parquet_data(parquet_path: str) -> pd.DataFrame:
@@ -79,7 +79,9 @@ def list_bdalti_links(pattern: str = None) -> list:
     links = []
     for a in soup.find_all("a", href=True):
         href = a["href"]
-        if "data.geopf.fr/telechargement/download/BDALTI" in href and href.endswith(".7z"):
+        if "data.geopf.fr/telechargement/download/BDALTI" in href and href.endswith(
+            ".7z"
+        ):
             if pattern is None or pattern in href:
                 links.append(href)
     links = sorted(set(links))

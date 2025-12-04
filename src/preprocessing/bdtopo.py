@@ -33,7 +33,12 @@ def find_7z_links(date):
     for a in soup.find_all("a", href=True):
         href = a["href"]
         # on filtre sur TOUSTHEMES + LAMB93 + date + extension
-        if "BDTOPO" in href and "TOUSTHEMES_SHP_LAMB93_D" in href and date in href and href.endswith(".7z"):
+        if (
+            "BDTOPO" in href
+            and "TOUSTHEMES_SHP_LAMB93_D" in href
+            and date in href
+            and href.endswith(".7z")
+        ):
             if pattern.search(href):
                 if href.startswith("http"):
                     url = href
@@ -58,12 +63,15 @@ def download_file(url, out_dir):
     with requests.get(url, stream=True) as r:
         r.raise_for_status()
         total = int(r.headers.get("content-length", 0))
-        with open(out_path, "wb") as f, tqdm(
-            total=total,
-            unit="B",
-            unit_scale=True,
-            desc=filename,
-        ) as pbar:
+        with (
+            open(out_path, "wb") as f,
+            tqdm(
+                total=total,
+                unit="B",
+                unit_scale=True,
+                desc=filename,
+            ) as pbar,
+        ):
             for chunk in r.iter_content(chunk_size=8192):
                 if chunk:
                     f.write(chunk)
@@ -83,7 +91,9 @@ def unzip_one_archive(archive_path):
     """
     os.makedirs(UNZIP_DIR, exist_ok=True)
     archive_path = Path(archive_path)
-    dept_name = archive_path.stem  # ex: BDTOPO_3-5_TOUSTHEMES_SHP_LAMB93_D001_2021-03-15
+    dept_name = (
+        archive_path.stem
+    )  # ex: BDTOPO_3-5_TOUSTHEMES_SHP_LAMB93_D001_2021-03-15
     target_dir = Path(UNZIP_DIR) / dept_name
 
     if target_dir.exists():
@@ -133,14 +143,20 @@ def merge_shapefiles_to_gpkg(shapefiles):
             # Création du GPKG
             cmd = [
                 "ogr2ogr",
-                "-f", "GPKG",
+                "-f",
+                "GPKG",
                 OUT_GPKG,
                 shp,
-                "-nln", LAYER_OUT,
-                "-sql", sql,           # 🔍 filtre ici
-                "-t_srs", "EPSG:2154",
-                "-nlt", "LINESTRING",  # aplati en 2D
-                "-dim", "2",
+                "-nln",
+                LAYER_OUT,
+                "-sql",
+                sql,  # 🔍 filtre ici
+                "-t_srs",
+                "EPSG:2154",
+                "-nlt",
+                "LINESTRING",  # aplati en 2D
+                "-dim",
+                "2",
                 "-progress",
             ]
             first_create = False
@@ -148,15 +164,21 @@ def merge_shapefiles_to_gpkg(shapefiles):
             # Append
             cmd = [
                 "ogr2ogr",
-                "-f", "GPKG",
+                "-f",
+                "GPKG",
                 "-append",
                 OUT_GPKG,
                 shp,
-                "-nln", LAYER_OUT,
-                "-sql", sql,           # 🔍 filtre ici aussi
-                "-t_srs", "EPSG:2154",
-                "-nlt", "LINESTRING",
-                "-dim", "2",
+                "-nln",
+                LAYER_OUT,
+                "-sql",
+                sql,  # 🔍 filtre ici aussi
+                "-t_srs",
+                "EPSG:2154",
+                "-nlt",
+                "LINESTRING",
+                "-dim",
+                "2",
                 "-progress",
             ]
         run(cmd)
@@ -185,9 +207,9 @@ def main():
         shutil.rmtree(dept_dir)
         os.remove(archive_path)
         print(f"[CLEAN] Supprimé : {dept_dir} et {archive_path}")
-    cmd = ['rm', '-r', DOWNLOAD_DIR]
+    cmd = ["rm", "-r", DOWNLOAD_DIR]
     run(cmd)
-    cmd = ['rm', '-r', UNZIP_DIR]
+    cmd = ["rm", "-r", UNZIP_DIR]
     run(cmd)
     print(f"Terminé. GPKG final : {OUT_GPKG}")
 
