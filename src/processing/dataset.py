@@ -47,6 +47,14 @@ class FranceHierarchicalDataset(InMemoryDataset):
     def processed_file_names(self):
         return ["data_hierarchique_france.pt"]
 
+    @property
+    def raw_dir(self):
+        return self.root
+
+    @property
+    def processed_dir(self):
+        return os.path.join(self.root, "processed")
+
     def process(self):
         print("--- DÉBUT DU TRAITEMENT ---")
 
