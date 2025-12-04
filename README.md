@@ -1,11 +1,3 @@
-C'est parti. Voici une proposition de fichier `README.md` complet et structuré pour votre dépôt.
-
-Il est conçu pour être à la fois **scientifique** (expliquant votre démarche de "désintrication") et **technique** (pour que quelqu'un puisse installer et lancer le code).
-
-Vous pouvez copier-coller ce contenu directement dans un fichier nommé `README.md` à la racine de votre projet.
-
------
-
 # 🏙️ GNN Villes : Segmentation Morpho-Dynamique des Territoires
 
 > **Une approche "fractale" et auto-supervisée pour la typologie des villes françaises par GNN Hiérarchique.**
