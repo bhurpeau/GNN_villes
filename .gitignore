@@ -17,7 +17,7 @@ eggs/
 *.egg-info/
 .installed.cfg
 *.egg
-
+*.ipynb
 # Jupyter Notebook
 .ipynb_checkpoints
 

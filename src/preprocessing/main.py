@@ -56,7 +56,7 @@ def main():
     if os.path.exists(raster_output_25):
         os.remove(raster_output_25)
     print(f"⚙️ Génération de {raster_output_25}...")
-    id_map_inv_25m = create_tile_id_raster(grid, RASTER_OCS_PATH, raster_output_25, id_col="id_carr_1km")
+    id_map_inv_25m = create_tile_id_raster(grid, RASTER_DEM_PATH, raster_output_25, id_col="id_carr_1km")
     if os.path.exists(RASTER_SLOPE_PATH):
         os.remove(RASTER_SLOPE_PATH)
     cmd = [
