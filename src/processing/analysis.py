@@ -73,6 +73,7 @@ def analyze():
                 "struct_bati": "mean",
                 "struct_nature": "mean",
                 "struct_agri": "mean",
+                "log_amenity_density": "mean",
                 "densite_pop": agg_density_func,
             }
         )
@@ -124,9 +125,9 @@ def analyze():
                     "struct_bati": grp["struct_bati"].mean(),
                     "struct_nature": grp["struct_nature"].mean(),
                     "struct_agri": grp["struct_agri"].mean(),
+                    "vitalite_locale": grp["log_amenity_density"].mean(),
                     # Flux (Macro) : MOYENNE SIMPLE (Portrait robot du rôle fonctionnel de la commune)
-                    # C'est ici que le changement impacte : on donne le même poids à chaque ville
-                    # pour identifier le "rôle type" (ex: pôle relais) indépendamment de sa taille.
+                    "centralite_macro": grp["nb_equip_structurants"].mean(),
                     "macro_taux_retenue": grp["macro_taux_retenue"].mean(),
                     "macro_taux_stabilite": grp["macro_taux_stabilite"].mean(),
                     "nb_communes": len(grp),

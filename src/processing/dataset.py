@@ -89,6 +89,7 @@ class FranceHierarchicalDataset(InMemoryDataset):
             "struct_agri",
             "struct_eau",
             "struct_glacier",
+            "log_amenity_density",
         ]
         # Features Variantes
         cols_variant = [
@@ -141,7 +142,7 @@ class FranceHierarchicalDataset(InMemoryDataset):
             min_idx, max_idx = indices.min(), indices.max()
 
             # Grâce au tri, min_idx et max_idx définissent un bloc contigu STRICT
-            local_x = x_micro[min_idx : max_idx + 1]
+            local_x = x_micro[min_idx: max_idx + 1]
 
             # Filtre rapide sur les arêtes (Optimisé)
             # On suppose que les arêtes sont intra-communales, donc si source est dans [min, max], cible aussi
@@ -165,7 +166,7 @@ class FranceHierarchicalDataset(InMemoryDataset):
         # ------------------------------------------------
 
         x_macro = torch.tensor(
-            df_macro[["macro_taux_retenue", "macro_taux_stabilite"]].values,
+            df_macro[["macro_taux_retenue", "macro_taux_stabilite", "nb_equip_structurants"]].values,
             dtype=torch.float,
         )
 

@@ -22,9 +22,9 @@ MASK_RATE = 0.15
 
 # Indices des colonnes dans le tenseur x (selon dataset.py)
 IDX_INVARIANT_START = 0
-IDX_INVARIANT_END = 9
-IDX_VARIANT_START = 9
-IDX_VARIANT_END = 17
+IDX_INVARIANT_END = 10
+IDX_VARIANT_START = 10
+IDX_VARIANT_END = 18
 
 
 def mask_features(x, mask_rate):
@@ -71,7 +71,7 @@ def train():
 
     # 2. Modèle & Optimiseur
     model = HierarchicalGNN(
-        micro_input_dim=17, macro_input_dim=2, latent_dim=32, social_output_dim=8
+        micro_input_dim=18, macro_input_dim=3, latent_dim=32, social_output_dim=8
     ).to(DEVICE)
 
     optimizer = torch.optim.Adam(model.parameters(), lr=LR)

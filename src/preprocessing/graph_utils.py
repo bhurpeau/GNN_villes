@@ -4,7 +4,6 @@
 import numpy as np
 import geopandas as gpd
 import torch
-import pandas as pd
 from libpysal import weights
 
 

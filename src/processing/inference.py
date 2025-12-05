@@ -1,6 +1,5 @@
 import torch
 import pandas as pd
-import numpy as np
 import os
 from tqdm import tqdm
 from torch_geometric.loader import DataLoader
@@ -43,7 +42,7 @@ def inference():
     # 2. Chargement Modèle
     # On doit réinstancier exactement la même architecture
     model = HierarchicalGNN(
-        micro_input_dim=17, macro_input_dim=2, latent_dim=32, social_output_dim=8
+        micro_input_dim=18, macro_input_dim=3, latent_dim=32, social_output_dim=8
     ).to(DEVICE)
 
     # Chargement des poids

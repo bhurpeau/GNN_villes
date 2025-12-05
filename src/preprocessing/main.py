@@ -286,6 +286,7 @@ def main():
         {"edge_index": edge_index, "edge_attr": edge_attr, "mapping": mapping_idx_code},
         "data_GNN/graph_macro_physique.pt",
     )
+
     # 8. Construction des données macro (Flux & Socio-éco) - MANQUANT
     print("--- Traitement des flux Macro ---")
     # Définir les chemins (idéalement via config.yaml, sinon en constantes)
@@ -300,17 +301,12 @@ def main():
 
     if df_macro_bpe is not None:
         print("Enrichissement Macro avec les équipements structurants...")
-        # df_macro_bpe contient ["code", "nb_equip_structurants"]
-        # flux_internes contient ["code", "macro_taux_retenue", ...]
-
-        # Attention au typage du code commune pour la fusion
         flux_internes["code"] = flux_internes["code"].astype(str)
         df_macro_bpe["code"] = df_macro_bpe["code"].astype(str)
 
         nodes_enriched = flux_internes.merge(df_macro_bpe, on="code", how="left")
         nodes_enriched["nb_equip_structurants"] = nodes_enriched["nb_equip_structurants"].fillna(0)
 
-        # On écrase le fichier précédent avec la version enrichie
         from .data_io import save_parquet_data
 
         save_parquet_data(nodes_enriched, "data_GNN/nodes_macro_attributes.parquet")
