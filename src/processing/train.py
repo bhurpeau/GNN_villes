@@ -77,7 +77,7 @@ def train():
     optimizer = torch.optim.Adam(model.parameters(), lr=LR)
     # Si la loss stagne pendant 3 époques, on divise le LR par 2
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-        optimizer, mode="min", factor=0.5, patience=3, verbose=True
+        optimizer, mode="min", factor=0.5, patience=3
     )
     # 3. BUFFER GLOBAL Z_MORPHO
     num_communes = data_macro.x.size(0)
