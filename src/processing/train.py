@@ -75,7 +75,10 @@ def train():
     ).to(DEVICE)
 
     optimizer = torch.optim.Adam(model.parameters(), lr=LR)
-
+    # Si la loss stagne pendant 3 époques, on divise le LR par 2
+    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+        optimizer, mode="min", factor=0.5, patience=3, verbose=True
+    )
     # 3. BUFFER GLOBAL Z_MORPHO
     num_communes = data_macro.x.size(0)
     z_global_buffer = torch.zeros((num_communes, 32)).to(DEVICE)
@@ -124,7 +127,7 @@ def train():
             target_social = torch.stack(target_social_list)  # Shape [Batch, 8]
 
             # 5. CALCUL DE LA LOSS
-            loss = F.mse_loss(social_reconstruction, target_social)
+            loss = F.huber_loss(social_reconstruction, target_social, delta=1.0)
 
             loss.backward()
             optimizer.step()
@@ -133,9 +136,15 @@ def train():
             total_loss += loss.item()
             pbar.set_postfix({"loss": loss.item()})
 
+        # Fin d'époque : Step du Scheduler
+        avg_loss = total_loss / len(loader)
+        scheduler.step(avg_loss)
+
         # Fin d'époque : Sauvegarde checkpoint
         if (epoch + 1) % 5 == 0:
-            torch.save(model.state_dict(), f"checkpoint_epoch_{epoch+1}.pth")
+            torch.save(
+                model.state_dict(), f"checkpoints/checkpoint_epoch_{epoch+1}.pth"
+            )
 
 
 if __name__ == "__main__":
