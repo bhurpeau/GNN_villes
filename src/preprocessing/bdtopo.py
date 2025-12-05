@@ -150,7 +150,7 @@ def merge_shapefiles_to_gpkg(shapefiles):
                 "-nln",
                 LAYER_OUT,
                 "-sql",
-                sql,  # 🔍 filtre ici
+                sql,
                 "-t_srs",
                 "EPSG:2154",
                 "-nlt",
@@ -172,7 +172,7 @@ def merge_shapefiles_to_gpkg(shapefiles):
                 "-nln",
                 LAYER_OUT,
                 "-sql",
-                sql,  # 🔍 filtre ici aussi
+                sql,
                 "-t_srs",
                 "EPSG:2154",
                 "-nlt",

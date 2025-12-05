@@ -264,6 +264,8 @@ def main():
             # On remplit les NaNs par une valeur vide pour éviter le string "nan"
             stats_gdf[col] = stats_gdf[col].fillna("").astype(str)
     stats_gdf = stats_gdf[to_keep].copy()
+    stats_gdf = stats_gdf.sort_values(["code", "id_carr_1km"]).reset_index(drop=True)
+
     save_geoparquet_data(stats_gdf, OUT_TILE_FEATURES)
     print(
         f"[OK] Données de {len(stats_gdf)} carreaux enregistrées dans {OUT_TILE_FEATURES}."

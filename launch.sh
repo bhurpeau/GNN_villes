@@ -12,11 +12,13 @@ uv venv "$VENV_DIR"
 source "$VENV_DIR/bin/activate"
 uv sync
 uv pip install torch-cluster torch-scatter torch-sparse -f https://data.pyg.org/whl/torch-2.5.0+cu124.html
-python -m ipykernel install --user --name=venv-gml --display-name "Python (.venv GNN_Villes)"
 mkdir ./data
 mkdir ./data_GNN
+mkdir ./out
 mkdir ./BDALTI
 mkdir ./checkpoints
 mc cp -r  s3/bhurpeau/graphe/villes/data/ data/
 mc cp -r  s3/bhurpeau/graphe/villes/data_GNN/ data_GNN/
+mc cp -r  s3/bhurpeau/graphe/villes/out/ out/
 mc cp  s3/bhurpeau/graphe/villes/BDALTI/bdalti25m.tif BDALTI/
+python -m ipykernel install --user --name=venv-gml --display-name "Python (.venv GNN_Villes)"
