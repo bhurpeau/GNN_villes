@@ -16,8 +16,7 @@ python -m ipykernel install --user --name=venv-gml --display-name "Python (.venv
 mkdir ./data
 mkdir ./data_GNN
 mkdir ./BDALTI
-mkdir ./out
+mkdir ./checkpoints
 mc cp -r  s3/bhurpeau/graphe/villes/data/ data/
 mc cp -r  s3/bhurpeau/graphe/villes/data_GNN/ data_GNN/
 mc cp  s3/bhurpeau/graphe/villes/BDALTI/bdalti25m.tif BDALTI/
-mc cp  s3/bhurpeau/graphe/villes/BDALTI/bdalti25m_slope_deg.tif BDALTI/
