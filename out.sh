@@ -13,12 +13,6 @@ dirs=(
     "out"
 )
 
-# Vérification : mc est disponible
-if ! command -v mc >/dev/null 2>&1; then
-    echo "❌ Erreur : la commande 'mc' n'est pas disponible dans le PATH."
-    exit 1
-fi
-
 # Vérification : le répertoire parent existe
 if [[ ! -d "$parent_dir" ]]; then
     echo "❌ Erreur : le répertoire parent n'existe pas : $parent_dir"
