@@ -62,7 +62,7 @@ def train():
     dataset = FranceHierarchicalDataset(root=DATA_ROOT)
 
     # On sépare Macro (élément 0) et la liste Micro (éléments 1 à fin)
-    data_full = torch.load(dataset.processed_paths[0])
+    data_full = torch.load(dataset.processed_paths[0], weights_only=False)
     data_macro = data_full[0].to(DEVICE)
     data_list_micro = data_full[1]  # Liste des objets Data communes
 

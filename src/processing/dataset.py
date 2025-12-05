@@ -29,7 +29,7 @@ def merge_macro_edges(phys_index, phys_attr, flux_index, flux_attr):
 class FranceHierarchicalDataset(InMemoryDataset):
     def __init__(self, root, transform=None, pre_transform=None):
         super().__init__(root, transform, pre_transform)
-        self.data, self.slices = torch.load(self.processed_paths[0])
+        self.data, self.slices = torch.load(self.processed_paths[0], weights_only=False)
 
     @property
     def raw_file_names(self):
@@ -170,7 +170,7 @@ class FranceHierarchicalDataset(InMemoryDataset):
         )
 
         # ARÊTES MACRO
-        graph_phys = torch.load(self.raw_paths[3])
+        graph_phys = torch.load(self.raw_paths[3], weights_only=False)
         phys_edge_index = graph_phys["edge_index"]
         phys_edge_attr = graph_phys["edge_attr"]
         phys_mapping = graph_phys["mapping"]

@@ -17,11 +17,11 @@ class HierarchicalGNN(nn.Module):
         super(HierarchicalGNN, self).__init__()
 
         # --- NIVEAU MICRO (GCN) ---
-        # [cite_start]Lissage de l'information intra-communale [cite: 105-107]
         self.micro_conv1 = GCNConv(micro_input_dim, hidden_dim)
+        self.bn_micro1 = nn.BatchNorm1d(hidden_dim)
         self.micro_conv2 = GCNConv(hidden_dim, hidden_dim)
+        self.bn_micro2 = nn.BatchNorm1d(hidden_dim)
 
-        # [cite_start]Readout: Compression du sous-graphe en un vecteur [cite: 112-113]
         self.micro_readout = nn.Sequential(
             nn.Linear(hidden_dim * 2, hidden_dim),  # *2 car Mean + Max
             nn.ReLU(),
@@ -49,8 +49,13 @@ class HierarchicalGNN(nn.Module):
         """Étape 1 : Calculer Z_morpho pour un batch de communes"""
         x, edge_index, batch = data_micro.x, data_micro.edge_index, data_micro.batch
         # Convolution
-        x = F.relu(self.micro_conv1(x, edge_index))
+        x = self.micro_conv1(x, edge_index)
+        x = self.bn_micro1(x)
+        x = F.relu(x)
         x = F.dropout(x, p=0.2, training=self.training)
+
+        x = self.bn_micro2(x)
+        x = F.relu(x)
         x = self.micro_conv2(x, edge_index)
         # Pooling (Mean + Max)
         x_mean = global_mean_pool(x, batch)
