@@ -25,9 +25,7 @@ def find_7z_links(date):
     soup = BeautifulSoup(resp.text, "html.parser")
 
     # Motif général
-    pattern = re.compile(
-        r"BDTOPO_\d-\d_TOUSTHEMES_SHP_LAMB93_D\d{3}_\d{4}-\d{2}-\d{2}\.7z$"
-    )
+    pattern = re.compile(r"BDTOPO_\d-\d_TOUSTHEMES_SHP_LAMB93_D\d{3}_\d{4}-\d{2}-\d{2}\.7z$")
 
     links = set()
     for a in soup.find_all("a", href=True):
@@ -91,9 +89,7 @@ def unzip_one_archive(archive_path):
     """
     os.makedirs(UNZIP_DIR, exist_ok=True)
     archive_path = Path(archive_path)
-    dept_name = (
-        archive_path.stem
-    )  # ex: BDTOPO_3-5_TOUSTHEMES_SHP_LAMB93_D001_2021-03-15
+    dept_name = archive_path.stem  # ex: BDTOPO_3-5_TOUSTHEMES_SHP_LAMB93_D001_2021-03-15
     target_dir = Path(UNZIP_DIR) / dept_name
 
     if target_dir.exists():

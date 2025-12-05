@@ -194,27 +194,17 @@ class FranceHierarchicalDataset(InMemoryDataset):
         # Filtrage : On ne garde que les liens où les DEUX bouts existent dans notre dataset
         mask_valid = (src_new != -1) & (dst_new != -1)
 
-        phys_index_clean = torch.stack(
-            [src_new[mask_valid], dst_new[mask_valid]], dim=0
-        )
+        phys_index_clean = torch.stack([src_new[mask_valid], dst_new[mask_valid]], dim=0)
         phys_attr_clean = phys_edge_attr[mask_valid]
 
         df_flux = pd.read_parquet(self.raw_paths[4])
 
-        df_flux = df_flux[
-            df_flux["code"].isin(map_commune) & df_flux["code_a"].isin(map_commune)
-        ]
+        df_flux = df_flux[df_flux["code"].isin(map_commune) & df_flux["code_a"].isin(map_commune)]
 
-        src_flux = torch.tensor(
-            df_flux["code"].map(map_commune).values, dtype=torch.long
-        )
-        dst_flux = torch.tensor(
-            df_flux["code_a"].map(map_commune).values, dtype=torch.long
-        )
+        src_flux = torch.tensor(df_flux["code"].map(map_commune).values, dtype=torch.long)
+        dst_flux = torch.tensor(df_flux["code_a"].map(map_commune).values, dtype=torch.long)
         edge_index_flux = torch.stack([src_flux, dst_flux], dim=0)
-        edge_attr_flux = torch.tensor(
-            df_flux[["d_t", "migra"]].values, dtype=torch.float
-        )
+        edge_attr_flux = torch.tensor(df_flux[["d_t", "migra"]].values, dtype=torch.float)
 
         # FUSION FINALE (Avec les version nettoyées)
         final_index, final_attr = merge_macro_edges(

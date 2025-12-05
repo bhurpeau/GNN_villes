@@ -1,4 +1,3 @@
-import pandas as pd
 import geopandas as gpd
 import numpy as np
 from shapely.geometry import Point
@@ -19,7 +18,7 @@ def process_amenities(bpe_path, grid_gdf, out_micro_path, out_macro_path):
     # Lecture directe du Parquet
     # On ne charge que les colonnes utiles pour économiser la RAM
     cols_utiles = ["TYPEQU", "LAMBERT_X", "LAMBERT_Y", "DEPCOM"]
-    df_bpe = pd.read_parquet(bpe_path, columns=cols_utiles)
+    df_bpe = load_parquet_data(bpe_path, cols=cols_utiles)
 
     # Conversion en GeoDataFrame
     geometry = [Point(xy) for xy in zip(df_bpe.LAMBERT_X, df_bpe.LAMBERT_Y)]
@@ -34,9 +33,7 @@ def process_amenities(bpe_path, grid_gdf, out_micro_path, out_macro_path):
     )
 
     # Comptage par carreau
-    micro_counts = (
-        joined.groupby("id_carr_1km").size().reset_index(name="nb_equipements")
-    )
+    micro_counts = joined.groupby("id_carr_1km").size().reset_index(name="nb_equipements")
 
     # Log-densité (Feature Engineering)
     micro_counts["log_amenity_density"] = np.log1p(micro_counts["nb_equipements"])
@@ -65,9 +62,7 @@ def process_amenities(bpe_path, grid_gdf, out_micro_path, out_macro_path):
     bpe_struct = df_bpe[df_bpe["TYPEQU"].isin(codes_structurants)]
 
     # Comptage par commune
-    macro_counts = (
-        bpe_struct.groupby("DEPCOM").size().reset_index(name="nb_equip_structurants")
-    )
+    macro_counts = bpe_struct.groupby("DEPCOM").size().reset_index(name="nb_equip_structurants")
     macro_counts = macro_counts.rename(columns={"DEPCOM": "code"})
 
     save_parquet_data(macro_counts, out_macro_path)

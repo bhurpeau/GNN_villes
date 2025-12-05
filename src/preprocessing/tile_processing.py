@@ -185,9 +185,7 @@ def compute_altitude_stats(
         slope_nodata = src_slope.nodata
 
         # Préparation des accumulateurs (index 0 ignoré, indices 1..N pour carreaux)
-        N = int(
-            src_tile.read(1).max()
-        )  # nombre total de carreaux (valeur max dans le raster ID)
+        N = int(src_tile.read(1).max())  # nombre total de carreaux (valeur max dans le raster ID)
         count = np.zeros(N + 1, dtype=np.int64)
         sum_z = np.zeros(N + 1, dtype=np.float64)
         sum_z2 = np.zeros(N + 1, dtype=np.float64)
@@ -258,9 +256,7 @@ def assign_tiles_to_communes(
     Retourne une Series indexée par id_carr_1km donnant le code commune assigné.
     """
     # Intersection carreaux/communes pour trouver les chevauchements
-    pieces = gpd.overlay(
-        grid_gdf, communes_gdf[[commune_code_col, "geometry"]], how="intersection"
-    )
+    pieces = gpd.overlay(grid_gdf, communes_gdf[[commune_code_col, "geometry"]], how="intersection")
     pieces["area"] = pieces.geometry.area
     # Trier par aire décroissante pour chaque carreau
     pieces = pieces.sort_values(["id_carr_1km", "area"], ascending=[True, False])

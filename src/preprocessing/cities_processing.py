@@ -16,9 +16,7 @@ def map_plm(code):
     return code
 
 
-def process_macro_flows(
-    dad_path, dt_path, pop_path, acti_path, output_nodes, output_edges
-):
+def process_macro_flows(dad_path, dt_path, pop_path, acti_path, output_nodes, output_edges):
     print("--- PRÉ-TRAITEMENT DES FLUX (PLM + FILTRE RELATIF) ---")
 
     # 1. Chargement
@@ -53,9 +51,7 @@ def process_macro_flows(
     pop.columns = ["code", "stock_pop"]
 
     # Nettoyage et conversion Stocks
-    pop["stock_pop"] = (
-        pd.to_numeric(pop["stock_pop"], errors="coerce").fillna(0).astype(float)
-    )
+    pop["stock_pop"] = pd.to_numeric(pop["stock_pop"], errors="coerce").fillna(0).astype(float)
     pop["code"] = pop["code"].astype(str).apply(map_plm)
 
     pop = pop.groupby("code")["stock_pop"].sum().reset_index()
@@ -65,9 +61,7 @@ def process_macro_flows(
     acti.columns = ["code", "stock_acti"]
 
     # Nettoyage et conversion Stocks
-    acti["stock_acti"] = (
-        pd.to_numeric(acti["stock_acti"], errors="coerce").fillna(0).astype(float)
-    )
+    acti["stock_acti"] = pd.to_numeric(acti["stock_acti"], errors="coerce").fillna(0).astype(float)
     acti["code"] = acti["code"].astype(str).apply(map_plm)
 
     acti = acti.groupby("code")["stock_acti"].sum().reset_index()
@@ -87,9 +81,7 @@ def process_macro_flows(
     )
 
     # RÈGLE DE FILTRE : > 50 personnes OU > .5% de la pop (avec plancher de 3)
-    mask_dad = (dad_edges["pop21"] > 50) | (
-        (dad_edges["share"] > 0.005) & (dad_edges["pop21"] > 3)
-    )
+    mask_dad = (dad_edges["pop21"] > 50) | ((dad_edges["share"] > 0.005) & (dad_edges["pop21"] > 3))
     dad_final = dad_edges[mask_dad].copy()
 
     dad_final["migra"] = dad_final["share"]
@@ -107,9 +99,7 @@ def process_macro_flows(
     )
 
     # RÈGLE DE FILTRE : > 50 personnes OU > 5% des actifs (lien fort)
-    mask_dt = (dt_edges["pop21"] > 50) | (
-        (dt_edges["share"] > 0.05) & (dt_edges["pop21"] > 3)
-    )
+    mask_dt = (dt_edges["pop21"] > 50) | ((dt_edges["share"] > 0.05) & (dt_edges["pop21"] > 3))
     dt_final = dt_edges[mask_dt].copy()
 
     dt_final["d_t"] = dt_final["share"]
@@ -120,9 +110,7 @@ def process_macro_flows(
     dt_final = dt_final[~dt_final["code_a"].isin(invalid)]
     dad_final = dad_final[~dad_final["code_a"].isin(invalid)]
 
-    edges_final = dt_final.merge(dad_final, on=["code", "code_a"], how="outer").fillna(
-        0
-    )
+    edges_final = dt_final.merge(dad_final, on=["code", "code_a"], how="outer").fillna(0)
 
     # 6. Extraction Nœuds (Diagonale)
     flux_internes = edges_final[edges_final["code"] == edges_final["code_a"]].copy()

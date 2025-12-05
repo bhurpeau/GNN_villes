@@ -48,8 +48,10 @@ def load_csv_data(csv_path: str, sep: str = None) -> pd.DataFrame:
             return pd.read_csv(csv_path, sep=",")
 
 
-def load_parquet_data(parquet_path: str) -> pd.DataFrame:
+def load_parquet_data(parquet_path: str, cols: list = None) -> pd.DataFrame:
     """Charge des données tabulaires depuis un fichier Parquet."""
+    if cols is not None:
+        pd.read_parquet(parquet_path, columns=cols)
     return pd.read_parquet(parquet_path)
 
 
@@ -79,9 +81,7 @@ def list_bdalti_links(pattern: str = None) -> list:
     links = []
     for a in soup.find_all("a", href=True):
         href = a["href"]
-        if "data.geopf.fr/telechargement/download/BDALTI" in href and href.endswith(
-            ".7z"
-        ):
+        if "data.geopf.fr/telechargement/download/BDALTI" in href and href.endswith(".7z"):
             if pattern is None or pattern in href:
                 links.append(href)
     links = sorted(set(links))
