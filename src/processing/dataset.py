@@ -57,9 +57,10 @@ class FranceHierarchicalDataset(InMemoryDataset):
         print("--- DÉBUT DU TRAITEMENT ---")
 
         # 1. CHARGEMENT MICRO & TRI
-        print("Chargement et tri des carreaux...")
+        print("Chargement des carreaux...")
         df_micro = pd.read_parquet(self.raw_paths[0])
-
+        edges_global = np.load(self.raw_paths[1])
+        edge_index_global = torch.tensor(edges_global, dtype=torch.long)
         # Features Invariantes
         cols_invariant = [
             "z_mean",
@@ -103,6 +104,7 @@ class FranceHierarchicalDataset(InMemoryDataset):
         x_var = torch.cat([(x_var_cont - mean_var) / std_var, x_var_flag], dim=1)
 
         x_micro = torch.cat([x_inv, x_var], dim=1)
+
 
         # SAUVEGARDE STATS
         stats = {

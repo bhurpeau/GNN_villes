@@ -72,8 +72,6 @@ source .venv/bin/activate
 
 # 3. Installation des dépendances (incluant PyTorch Geometric)
 uv sync
-# Note: torch-scatter/sparse sont installés via wheel pour compatibilité CUDA
-uv pip install torch-cluster torch-scatter torch-sparse -f https://data.pyg.org/whl/torch-2.5.0+cu124.html
 ```
 
 -----
@@ -86,8 +84,6 @@ Le pipeline de pré-traitement télécharge les données brutes (IGN, INSEE), co
 
 ```bash
 # Lance le pipeline complet (peut être long)
-uv run prepare-gnn-data
-# Ou via le script python direct
 python -m src.preprocessing.main
 ```
 
