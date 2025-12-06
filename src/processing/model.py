@@ -69,9 +69,13 @@ class HierarchicalGNN(nn.Module):
         # Concaténation [Signature Interne || Attributs Externe]
         x_combined = torch.cat([z_morpho, data_macro.x], dim=1)
         # Attention
-        x = self.macro_gat1(x_combined, data_macro.edge_index, edge_attr=data_macro.edge_attr)
+        x = self.macro_gat1(
+            x_combined, data_macro.edge_index, edge_attr=data_macro.edge_attr
+        )
         x = F.elu(x)
-        z_final = self.macro_gat2(x, data_macro.edge_index, edge_attr=data_macro.edge_attr)
+        z_final = self.macro_gat2(
+            x, data_macro.edge_index, edge_attr=data_macro.edge_attr
+        )
         return z_final
 
     def decode(self, z_final):

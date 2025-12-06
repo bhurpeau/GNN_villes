@@ -35,6 +35,8 @@ dev = [
 [tool.uv]
 package = true
 
-
 [project.scripts]
-prepare-gnn-data = "preprocessing.main:main"
+prepare-gnn-data = "src.preprocessing.main:main"
+train-gnn = "src.processing.train:train" 
+generate-embeddings = "src.processing.inference:inference"
+analyze-gnn = "src.processing.analysis:analysis"

@@ -81,7 +81,9 @@ def list_bdalti_links(pattern: str = None) -> list:
     links = []
     for a in soup.find_all("a", href=True):
         href = a["href"]
-        if "data.geopf.fr/telechargement/download/BDALTI" in href and href.endswith(".7z"):
+        if "data.geopf.fr/telechargement/download/BDALTI" in href and href.endswith(
+            ".7z"
+        ):
             if pattern is None or pattern in href:
                 links.append(href)
     links = sorted(set(links))

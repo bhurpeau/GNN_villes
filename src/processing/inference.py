@@ -42,19 +42,23 @@ def inference():
     # 2. Chargement Modèle
     # On doit réinstancier exactement la même architecture
     model = HierarchicalGNN(
-        micro_input_dim=18, macro_input_dim=3, latent_dim=32, social_output_dim=8
+        micro_input_dim=18, macro_input_dim=6, latent_dim=32, social_output_dim=8
     ).to(DEVICE)
 
     # Chargement des poids
     if os.path.exists(MODEL_PATH):
         print(f"Chargement des poids depuis {MODEL_PATH}...")
-        model.load_state_dict(torch.load(MODEL_PATH, map_location=DEVICE, weights_only=True))
+        model.load_state_dict(
+            torch.load(MODEL_PATH, map_location=DEVICE, weights_only=True)
+        )
     else:
         # Fallback : cherche dans le dossier courant si pas trouvé dans src/processing
         fallback_path = "checkpoint_epoch_20.pth"
         if os.path.exists(fallback_path):
             print(f"Chargement des poids depuis {fallback_path}...")
-            model.load_state_dict(torch.load(fallback_path, map_location=DEVICE, weights_only=True))
+            model.load_state_dict(
+                torch.load(fallback_path, map_location=DEVICE, weights_only=True)
+            )
         else:
             print("⚠️ ALERTE : Checkpoint introuvable ! Vérifiez le chemin.")
             return
@@ -86,7 +90,9 @@ def inference():
 
     # Récupération des codes INSEE pour faire la jointure
     # On recharge le fichier source pour être sûr de l'ordre (trié par code dans dataset.py)
-    df_micro = pd.read_parquet(os.path.join(DATA_ROOT, "statistiques_carreaux.parquet.gz"))
+    df_micro = pd.read_parquet(
+        os.path.join(DATA_ROOT, "statistiques_carreaux.parquet.gz")
+    )
     sorted_codes = sorted(list(df_micro["code"].unique()))
 
     if len(sorted_codes) != num_communes:

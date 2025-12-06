@@ -54,29 +54,11 @@ class FranceHierarchicalDataset(InMemoryDataset):
         return os.path.join(self.root, "processed")
 
     def process(self):
-        print("--- DÉBUT DU TRAITEMENT (VERSION ROBUSTE) ---")
+        print("--- DÉBUT DU TRAITEMENT ---")
 
         # 1. CHARGEMENT MICRO & TRI
         print("Chargement et tri des carreaux...")
         df_micro = pd.read_parquet(self.raw_paths[0])
-
-        # --- CORRECTION CRITIQUE 1 : TRI ET REMAPPING ---
-        # On trie par code pour que les carreaux d'une commune soient contigus
-        df_micro["old_idx"] = np.arange(len(df_micro))  # On garde la trace
-        df_micro = df_micro.sort_values("code").reset_index(drop=True)
-
-        # Création du vecteur de mapping : Old_ID -> New_ID
-        # map_arr[old] = new
-        map_arr = np.zeros(len(df_micro), dtype=np.int64)
-        map_arr[df_micro["old_idx"].values] = np.arange(len(df_micro))
-
-        # Chargement et mise à jour des arêtes globales
-        edges_global = np.load(self.raw_paths[1])
-        print("Ré-indexation des arêtes...")
-        # On traduit les anciens indices vers les nouveaux (post-tri)
-        edges_global = map_arr[edges_global]
-        edge_index_global = torch.tensor(edges_global, dtype=torch.long)
-        # ------------------------------------------------
 
         # Features Invariantes
         cols_invariant = [
@@ -142,7 +124,7 @@ class FranceHierarchicalDataset(InMemoryDataset):
             min_idx, max_idx = indices.min(), indices.max()
 
             # Grâce au tri, min_idx et max_idx définissent un bloc contigu STRICT
-            local_x = x_micro[min_idx: max_idx + 1]
+            local_x = x_micro[min_idx : max_idx + 1]
 
             # Filtre rapide sur les arêtes (Optimisé)
             # On suppose que les arêtes sont intra-communales, donc si source est dans [min, max], cible aussi
@@ -164,12 +146,20 @@ class FranceHierarchicalDataset(InMemoryDataset):
         df_macro = df_macro.fillna(df_macro.mean(numeric_only=True))
         df_macro = df_macro.reset_index()
         # ------------------------------------------------
+        cols_macro = [
+            "macro_taux_retenue",
+            "macro_taux_stabilite",
+            "nb_equip_structurants",
+            "Q1",
+            "Q2",
+            "Q3",
+        ]
+        x_macro_raw = df_macro[cols_macro].values
+        from sklearn.preprocessing import StandardScaler
 
-        x_macro = torch.tensor(
-            df_macro[["macro_taux_retenue", "macro_taux_stabilite", "nb_equip_structurants"]].values,
-            dtype=torch.float,
-        )
-
+        scaler_macro = StandardScaler()
+        x_macro_scaled = scaler_macro.fit_transform(x_macro_raw)
+        x_macro = torch.tensor(x_macro_scaled, dtype=torch.float)
         # ARÊTES MACRO
         graph_phys = torch.load(self.raw_paths[3], weights_only=False)
         phys_edge_index = graph_phys["edge_index"]
@@ -195,17 +185,27 @@ class FranceHierarchicalDataset(InMemoryDataset):
         # Filtrage : On ne garde que les liens où les DEUX bouts existent dans notre dataset
         mask_valid = (src_new != -1) & (dst_new != -1)
 
-        phys_index_clean = torch.stack([src_new[mask_valid], dst_new[mask_valid]], dim=0)
+        phys_index_clean = torch.stack(
+            [src_new[mask_valid], dst_new[mask_valid]], dim=0
+        )
         phys_attr_clean = phys_edge_attr[mask_valid]
 
         df_flux = pd.read_parquet(self.raw_paths[4])
 
-        df_flux = df_flux[df_flux["code"].isin(map_commune) & df_flux["code_a"].isin(map_commune)]
+        df_flux = df_flux[
+            df_flux["code"].isin(map_commune) & df_flux["code_a"].isin(map_commune)
+        ]
 
-        src_flux = torch.tensor(df_flux["code"].map(map_commune).values, dtype=torch.long)
-        dst_flux = torch.tensor(df_flux["code_a"].map(map_commune).values, dtype=torch.long)
+        src_flux = torch.tensor(
+            df_flux["code"].map(map_commune).values, dtype=torch.long
+        )
+        dst_flux = torch.tensor(
+            df_flux["code_a"].map(map_commune).values, dtype=torch.long
+        )
         edge_index_flux = torch.stack([src_flux, dst_flux], dim=0)
-        edge_attr_flux = torch.tensor(df_flux[["d_t", "migra"]].values, dtype=torch.float)
+        edge_attr_flux = torch.tensor(
+            df_flux[["d_t", "migra"]].values, dtype=torch.float
+        )
 
         # FUSION FINALE (Avec les version nettoyées)
         final_index, final_attr = merge_macro_edges(

@@ -27,17 +27,6 @@ IDX_VARIANT_START = 10
 IDX_VARIANT_END = 18
 
 
-def mask_features(x, mask_rate):
-    """
-    Masque aléatoire pour l'auto-supervision.
-    Retourne : x_masked (entrée), mask (booléens), x_target (vérité terrain)
-    """
-    mask = torch.rand(x.size()) < mask_rate
-    x_masked = x.clone()
-    x_masked[mask] = 0.0  # On remplace par 0 (ou bruit gaussien)
-    return x_masked, mask, x
-
-
 def mask_variant_features(x, mask_rate=0.5):
     """
     Masque uniquement les variables sociales.
@@ -71,7 +60,7 @@ def train():
 
     # 2. Modèle & Optimiseur
     model = HierarchicalGNN(
-        micro_input_dim=18, macro_input_dim=3, latent_dim=32, social_output_dim=8
+        micro_input_dim=18, macro_input_dim=6, latent_dim=32, social_output_dim=8
     ).to(DEVICE)
 
     optimizer = torch.optim.Adam(model.parameters(), lr=LR)
@@ -142,7 +131,9 @@ def train():
 
         # Fin d'époque : Sauvegarde checkpoint
         if (epoch + 1) % 5 == 0:
-            torch.save(model.state_dict(), f"checkpoints/checkpoint_epoch_{epoch+1}.pth")
+            torch.save(
+                model.state_dict(), f"checkpoints/checkpoint_epoch_{epoch+1}.pth"
+            )
 
 
 if __name__ == "__main__":

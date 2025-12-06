@@ -36,6 +36,8 @@ TRAVAIL = "data/DT21.parquet"
 POPULATION = "data/pop21.csv"
 ACTIVITE = "data/acti.csv"
 BPE_PATH = "data/BPE24.parquet"
+FILO_PATH = "data/filosofi_2021.csv"
+FILO_CARREAUX = "data/filo_2019_carreaux_1km_met.csv"
 # Chemins de sortie (parquet et numpy)
 OUT_TILE_FEATURES = "data_GNN/statistiques_carreaux.parquet.gz"
 OUT_EDGES_ALL = "data_GNN/edges_toutes_communes.npy"
@@ -56,17 +58,19 @@ def main():
     except FileNotFoundError:
         pop_df = None
     try:
-        socio_df = load_csv_data(
-            "data/filo_2019_carreaux_1km_met.csv"
-        )  # données Filosofi 2019 par carreau
+        socio_df = load_csv_data(FILO_CARREAUX)  # données Filosofi 2019 par carreau
     except FileNotFoundError:
         socio_df = None
 
     print("Traitement des équipements (BPE)...")
     try:
-        df_micro_bpe, df_macro_bpe = process_amenities(BPE_PATH, grid, out_micro_bpe, out_macro_bpe)
+        df_micro_bpe, df_macro_bpe = process_amenities(
+            BPE_PATH, grid, out_micro_bpe, out_macro_bpe
+        )
     except FileNotFoundError:
-        print(f"⚠️ Attention : Fichier BPE introuvable à {BPE_PATH}. Les aménités seront ignorées.")
+        print(
+            f"⚠️ Attention : Fichier BPE introuvable à {BPE_PATH}. Les aménités seront ignorées."
+        )
         df_micro_bpe, df_macro_bpe = None, None
     # 2. Rasterisation de la grille aux résolutions nécessaires et calcul des features par carreau
     # Raster ID aligné sur l'OCS (10m) pour l'occupation du sol
@@ -76,7 +80,9 @@ def main():
     id_map_inv_10m = create_tile_id_raster(
         grid, RASTER_OCS_PATH, raster_output, id_col="id_carr_1km"
     )
-    ocs_df = compute_landcover_composition(raster_output, RASTER_OCS_PATH, id_map_inv_10m)
+    ocs_df = compute_landcover_composition(
+        raster_output, RASTER_OCS_PATH, id_map_inv_10m
+    )
     # Raster ID aligné sur le MNT (25m) pour altitude/pente
     if os.path.exists(raster_output_25):
         os.remove(raster_output_25)
@@ -95,7 +101,9 @@ def main():
     stats_df = pd.merge(alt_df, ocs_df, on="id_carr_1km", how="left")
     # Ajouter population et socio-éco si disponibles
     if pop_df is not None:
-        stats_df = pd.merge(stats_df, pop_df, left_on="id_carr_1km", right_on="GRD_ID", how="left")
+        stats_df = pd.merge(
+            stats_df, pop_df, left_on="id_carr_1km", right_on="GRD_ID", how="left"
+        )
         if "GRD_ID" in stats_df.columns:
             stats_df = stats_df.drop(columns=["GRD_ID"])
     if socio_df is not None:
@@ -117,7 +125,9 @@ def main():
     # 4. Ajouter la géométrie des carreaux et assigner les communes
     # Merge avec la grille pour récupérer la géométrie
     stats_gdf = gpd.GeoDataFrame(
-        pd.merge(stats_df, grid[["id_carr_1km", "geometry"]], on="id_carr_1km", how="left"),
+        pd.merge(
+            stats_df, grid[["id_carr_1km", "geometry"]], on="id_carr_1km", how="left"
+        ),
         crs=grid.crs,
     )
     # Attribution des communes
@@ -125,8 +135,12 @@ def main():
     stats_gdf["code"] = stats_gdf["id_carr_1km"].map(mapping_series.to_dict())
     # 5. Calcul de features additionnelles (structures OCS et socio-éco)
     # Regroupements de classes OCS (structure du territoire)
-    stats_gdf["struct_bati"] = stats_gdf.get("part_classe_1", 0) + stats_gdf.get("part_classe_2", 0)
-    stats_gdf["struct_eco"] = stats_gdf.get("part_classe_3", 0) + stats_gdf.get("part_classe_4", 0)
+    stats_gdf["struct_bati"] = stats_gdf.get("part_classe_1", 0) + stats_gdf.get(
+        "part_classe_2", 0
+    )
+    stats_gdf["struct_eco"] = stats_gdf.get("part_classe_3", 0) + stats_gdf.get(
+        "part_classe_4", 0
+    )
     # Somme des classes nature 11 à 19
     nature_cols = [f"part_classe_{c}" for c in range(11, 20)]
     stats_gdf["struct_nature"] = (
@@ -134,13 +148,17 @@ def main():
     )
     # Somme des classes agriculture 20 à 22
     agri_cols = [f"part_classe_{c}" for c in range(20, 23)]
-    stats_gdf["struct_agri"] = stats_gdf[agri_cols].sum(axis=1) if agri_cols[0] in stats_gdf else 0
+    stats_gdf["struct_agri"] = (
+        stats_gdf[agri_cols].sum(axis=1) if agri_cols[0] in stats_gdf else 0
+    )
     # Eau et glacier
     stats_gdf["struct_eau"] = stats_gdf.get("part_classe_23", 0)
     stats_gdf["struct_glacier"] = stats_gdf.get("part_classe_24", 0)
     # Indicateurs socio-démographiques (si données disponibles)
     if "TOT_P_2021" in stats_gdf:
-        stats_gdf["densite_pop"] = stats_gdf["TOT_P_2021"]  # par km² (carreaux de 1 km²)
+        stats_gdf["densite_pop"] = stats_gdf[
+            "TOT_P_2021"
+        ]  # par km² (carreaux de 1 km²)
         if "TOT_P_2011" in stats_gdf:
             # Croissance démographique 2011-2021
             stats_gdf["croissance_pop"] = (
@@ -268,7 +286,9 @@ def main():
     stats_gdf = stats_gdf.sort_values(["code", "id_carr_1km"]).reset_index(drop=True)
 
     save_geoparquet_data(stats_gdf, OUT_TILE_FEATURES)
-    print(f"[OK] Données de {len(stats_gdf)} carreaux enregistrées dans {OUT_TILE_FEATURES}.")
+    print(
+        f"[OK] Données de {len(stats_gdf)} carreaux enregistrées dans {OUT_TILE_FEATURES}."
+    )
 
     # 6. Construction du graphe de contiguïté des carreaux
     edges = build_micro_intra_edges(stats_gdf)
@@ -281,7 +301,9 @@ def main():
     gdf_routes = gpd.read_file(ROUTE_PATH, columns=["ID", "IMPORTANCE", "geometry"])
 
     # 7. Construction des données macro
-    edge_index, edge_attr, mapping_idx_code = build_macro_physical_graph(gdf_communes, gdf_routes)
+    edge_index, edge_attr, mapping_idx_code = build_macro_physical_graph(
+        gdf_communes, gdf_routes
+    )
     torch.save(
         {"edge_index": edge_index, "edge_attr": edge_attr, "mapping": mapping_idx_code},
         "data_GNN/graph_macro_physique.pt",
@@ -298,14 +320,17 @@ def main():
         output_nodes="data_GNN/nodes_macro_attributes.parquet",
         output_edges="data_GNN/edges_macro_flux.parquet",
     )
-
+    filo = pd.read_csv(FILO_PATH, dtype={"code": str})
+    flux_internes = flux_internes.merge(filo, on="code", how="left")
     if df_macro_bpe is not None:
         print("Enrichissement Macro avec les équipements structurants...")
         flux_internes["code"] = flux_internes["code"].astype(str)
         df_macro_bpe["code"] = df_macro_bpe["code"].astype(str)
 
         nodes_enriched = flux_internes.merge(df_macro_bpe, on="code", how="left")
-        nodes_enriched["nb_equip_structurants"] = nodes_enriched["nb_equip_structurants"].fillna(0)
+        nodes_enriched["nb_equip_structurants"] = nodes_enriched[
+            "nb_equip_structurants"
+        ].fillna(0)
 
         from .data_io import save_parquet_data
 

@@ -80,13 +80,17 @@ def analyze():
         .reset_index()
     )
 
-    commune_stats["niveau_vie_moyen"] = commune_stats["ind_snv"] / commune_stats["ind"].replace(
-        0, np.nan
-    )
+    commune_stats["niveau_vie_moyen"] = commune_stats["ind_snv"] / commune_stats[
+        "ind"
+    ].replace(0, np.nan)
 
     # Fusion
-    df_final = df_emb.merge(commune_stats, left_on="code_insee", right_on="code", how="left")
-    df_final = df_final.merge(df_macro, left_on="code_insee", right_on="code", how="left")
+    df_final = df_emb.merge(
+        commune_stats, left_on="code_insee", right_on="code", how="left"
+    )
+    df_final = df_final.merge(
+        df_macro, left_on="code_insee", right_on="code", how="left"
+    )
 
     for col in ["macro_taux_retenue", "macro_taux_stabilite"]:
         df_final[col] = df_final[col].fillna(df_final[col].mean())
@@ -115,7 +119,9 @@ def analyze():
                 {
                     # Revenu : PONDÉRÉ (Pour refléter la richesse réelle, on évite les biais des micro-villages riches)
                     "niveau_vie_moyen": (
-                        np.average(grp["niveau_vie_moyen"], weights=ind) if w_ind > 0 else 0
+                        np.average(grp["niveau_vie_moyen"], weights=ind)
+                        if w_ind > 0
+                        else 0
                     ),
                     # Densité : PONDÉRÉ (Densité vécue : la densité ressentie par l'habitant moyen)
                     "densite_pop": (
@@ -147,7 +153,8 @@ def analyze():
             cmap = plt.get_cmap("tab20")
             cluster_colors = {i: cmap(i % 20) for i in range(n_clusters)}
             legend_patches = [
-                mpatches.Patch(color=cluster_colors[i], label=f"C{i}") for i in range(n_clusters)
+                mpatches.Patch(color=cluster_colors[i], label=f"C{i}")
+                for i in range(n_clusters)
             ]
 
             gdf_global = gdf_communes.merge(
@@ -156,7 +163,9 @@ def analyze():
                 right_on="code_insee",
                 how="left",
             )
-            gdf_global["color"] = gdf_global[col_cluster].map(cluster_colors).fillna("#e0e0e0")
+            gdf_global["color"] = (
+                gdf_global[col_cluster].map(cluster_colors).fillna("#e0e0e0")
+            )
 
             for zone_name, depts in ZONES_ZOOM.items():
                 if depts is None:
@@ -170,7 +179,9 @@ def analyze():
 
                 if len(gdf_plot) > 0:
                     fig, ax = plt.subplots(figsize=figsize)
-                    gdf_plot.plot(color=gdf_plot["color"], linewidth=lw, edgecolor="white", ax=ax)
+                    gdf_plot.plot(
+                        color=gdf_plot["color"], linewidth=lw, edgecolor="white", ax=ax
+                    )
                     if zone_name == "France" or zone_name == "Paris_PC":
                         ax.legend(
                             handles=legend_patches,

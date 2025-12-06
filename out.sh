@@ -6,7 +6,6 @@ parent_dir="/home/onyxia/work/GNN_villes"
 s3_dir="s3/bhurpeau/graphe/villes"
 
 dirs=(
-    "BDALTI"
     "checkpoints"
     "data"
     "data_GNN"
